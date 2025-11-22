@@ -329,7 +329,14 @@ export var Game = /*#__PURE__*/ function() {
                                 // Start onboarding
                                 if (_this.onboardingHands) {
                                     _this.onboardingHands.startDragOnboarding();
-                                    console.log('Onboarding started: drag gesture');
+
+                                    // Set interaction mode based on first step (now scaleUp)
+                                    if (_this.onboardingHands.currentStep === 'scaleUp' || _this.onboardingHands.currentStep === 'scaleDown') {
+                                        _this._setInteractionMode('scale');
+                                    } else if (_this.onboardingHands.currentStep === 'drag') {
+                                        _this._setInteractionMode('drag');
+                                    }
+
                                     // Show onboarding text
                                     if (_this.onboardingText) {
                                         _this.onboardingText.innerHTML = _this.onboardingHands.getCurrentInstructionText();
@@ -706,7 +713,6 @@ export var Game = /*#__PURE__*/ function() {
                 ];
                 // Initialize OnboardingHands system
                 this.onboardingHands = new OnboardingHands(this.scene, this.camera);
-                console.log('OnboardingHands initialized');
             }
         },
         {
@@ -1705,14 +1711,16 @@ export var Game = /*#__PURE__*/ function() {
                 // Update onboarding animation
                 if (this.onboardingHands && !this.onboardingCompleted) {
                     this.onboardingHands.update(deltaTime);
-                    // Check if user completed the current gesture
-                    if (this.onboardingHands.checkUserCompletion(this.hands)) {
-                        console.log('Onboarding step completed:', this.onboardingHands.currentStep);
 
-                        // Ocultar las manos de onboarding inmediatamente
+                    // Check if hands should be hidden (when pinch starts)
+                    if (this.onboardingHands.shouldHideHands(this.hands)) {
                         this.onboardingHands.leftHandGroup.visible = false;
                         this.onboardingHands.rightHandGroup.visible = false;
+                        this.onboardingHands.handsHidden = true;
+                    }
 
+                    // Check if user completed the action (movement required)
+                    if (this.onboardingHands.checkUserCompletion(this.hands)) {
                         // Add delay before transitioning to next step
                         var _this = this;
                         setTimeout(function() {
@@ -1732,8 +1740,6 @@ export var Game = /*#__PURE__*/ function() {
                                     _this.onboardingText.innerHTML = _this.onboardingHands.getCurrentInstructionText();
                                 }
                             } else {
-                                // All steps completed
-                                console.log('Onboarding fully completed!');
                                 _this.onboardingCompleted = true;
                                 _this.onboardingHands.stop();
                                 // Hide onboarding text
@@ -1744,7 +1750,7 @@ export var Game = /*#__PURE__*/ function() {
                                     }, 500);
                                 }
                             }
-                        }, 1200); // 1.2 segundos de delay
+                        }, 1200);
                     }
                 }
                 // Bounding box helper visibility logic REMOVED

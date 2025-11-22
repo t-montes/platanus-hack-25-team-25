@@ -54,9 +54,18 @@ export class OnboardingHands {
         this.animationSpeed = 1.5; // velocidad de animación
 
         // Estados del onboarding
-        this.onboardingSteps = ['drag', 'scaleUp', 'scaleDown'];
+        this.onboardingSteps = ['scaleUp', 'scaleDown', 'drag'];
         this.currentStepIndex = 0;
         this.stepCompleted = false; // Flag para evitar detecciones múltiples
+        this.handsHidden = false; // Flag para controlar si las manos ya fueron ocultadas
+
+        // Para detectar que completó la acción de drag
+        this.dragStartPosition = null;
+        this.dragMovementThreshold = 50; // Píxeles de movimiento para considerar drag completo
+
+        // Para detectar que completó la acción de scale
+        this.scaleStartDistance = null;
+        this.scaleMovementThreshold = 100; // Píxeles de cambio de distancia entre manos
 
         // Add groups to scene
         this.scene.add(this.leftHandGroup);
@@ -192,12 +201,12 @@ export class OnboardingHands {
     }
 
     /**
-     * Inicia el onboarding con animación de drag
+     * Inicia el onboarding con el primer paso (ahora es SCALE, no drag)
      */
     startDragOnboarding() {
         this.active = true;
         this.currentStepIndex = 0;
-        this.currentStep = this.onboardingSteps[0]; // 'drag'
+        this.currentStep = this.onboardingSteps[0];
         this.animationTime = 0;
     }
 
@@ -209,11 +218,12 @@ export class OnboardingHands {
         if (this.currentStepIndex < this.onboardingSteps.length) {
             this.currentStep = this.onboardingSteps[this.currentStepIndex];
             this.animationTime = 0;
-            this.stepCompleted = false; // Reset flag for new step
-            console.log('Onboarding next step:', this.currentStep);
+            this.stepCompleted = false;
+            this.handsHidden = false;
+            this.dragStartPosition = null;
+            this.scaleStartDistance = null;
             return true;
         } else {
-            // Onboarding completado
             return false;
         }
     }
@@ -403,38 +413,144 @@ export class OnboardingHands {
     }
 
     /**
-     * Verifica si el usuario ha completado el gesto requerido
+     * Calcula la distancia entre el índice y el pulgar para detectar inicio de pinch
+     */
+    getPinchDistance(hand) {
+        if (!hand.landmarks || hand.landmarks.length < 21) return null;
+
+        const thumbTip = hand.landmarks[4];
+        const indexTip = hand.landmarks[8];
+
+        const dx = thumbTip.x - indexTip.x;
+        const dy = thumbTip.y - indexTip.y;
+        const dz = thumbTip.z - indexTip.z;
+
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /**
+     * Verifica si se deben ocultar las manos guía (cuando empieza el pinch)
+     * Retorna true si las manos deben ocultarse
+     */
+    shouldHideHands(userHands) {
+        if (!this.active || this.handsHidden) return false;
+
+        const PINCH_START_THRESHOLD = 0.06;
+
+        if (this.currentStep === 'drag') {
+            if (userHands.length > 0) {
+                const hand = userHands[0];
+                const pinchDistance = this.getPinchDistance(hand);
+
+                if (pinchDistance !== null && pinchDistance < PINCH_START_THRESHOLD) {
+                    return true;
+                }
+            }
+        } else if (this.currentStep === 'scaleUp' || this.currentStep === 'scaleDown') {
+            if (userHands.length >= 2) {
+                const hand0 = userHands[0];
+                const hand1 = userHands[1];
+                const pinchDistance0 = this.getPinchDistance(hand0);
+                const pinchDistance1 = this.getPinchDistance(hand1);
+
+                if (pinchDistance0 !== null && pinchDistance1 !== null &&
+                    pinchDistance0 < PINCH_START_THRESHOLD && pinchDistance1 < PINCH_START_THRESHOLD) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Verifica si el usuario ha COMPLETADO la acción requerida (movimiento real)
+     * Retorna true cuando la acción se completó
      */
     checkUserCompletion(userHands) {
         if (!this.active || this.stepCompleted) return false;
 
+        const PINCH_START_THRESHOLD = 0.06;
+
         if (this.currentStep === 'drag') {
-            // Verificar si el usuario hizo pinch con una mano
             if (userHands.length > 0) {
                 const hand = userHands[0];
-                if (hand.isPinching) {
-                    this.stepCompleted = true;
-                    return true;
+                const pinchDistance = this.getPinchDistance(hand);
+
+                if (pinchDistance !== null && pinchDistance < PINCH_START_THRESHOLD && hand.pinchPointScreen) {
+                    if (this.dragStartPosition === null) {
+                        this.dragStartPosition = {
+                            x: hand.pinchPointScreen.x,
+                            y: hand.pinchPointScreen.y
+                        };
+                    } else {
+                        const dx = hand.pinchPointScreen.x - this.dragStartPosition.x;
+                        const dy = hand.pinchPointScreen.y - this.dragStartPosition.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance > this.dragMovementThreshold) {
+                            this.stepCompleted = true;
+                            return true;
+                        }
+                    }
+                } else {
+                    this.dragStartPosition = null;
                 }
             }
         } else if (this.currentStep === 'scaleUp') {
-            // Verificar si el usuario está usando dos manos con pinch (scale mode)
             if (userHands.length >= 2) {
                 const hand0 = userHands[0];
                 const hand1 = userHands[1];
-                if (hand0.isPinching && hand1.isPinching) {
-                    this.stepCompleted = true;
-                    return true;
+                const pinchDistance0 = this.getPinchDistance(hand0);
+                const pinchDistance1 = this.getPinchDistance(hand1);
+
+                if (pinchDistance0 !== null && pinchDistance1 !== null &&
+                    pinchDistance0 < PINCH_START_THRESHOLD && pinchDistance1 < PINCH_START_THRESHOLD &&
+                    hand0.pinchPointScreen && hand1.pinchPointScreen) {
+
+                    const dx = hand1.pinchPointScreen.x - hand0.pinchPointScreen.x;
+                    const dy = hand1.pinchPointScreen.y - hand0.pinchPointScreen.y;
+                    const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (this.scaleStartDistance === null) {
+                        this.scaleStartDistance = currentDistance;
+                    } else {
+                        const distanceChange = currentDistance - this.scaleStartDistance;
+                        if (distanceChange > this.scaleMovementThreshold) {
+                            this.stepCompleted = true;
+                            return true;
+                        }
+                    }
+                } else {
+                    this.scaleStartDistance = null;
                 }
             }
         } else if (this.currentStep === 'scaleDown') {
-            // Verificar si el usuario está usando dos manos con pinch (scale mode)
             if (userHands.length >= 2) {
                 const hand0 = userHands[0];
                 const hand1 = userHands[1];
-                if (hand0.isPinching && hand1.isPinching) {
-                    this.stepCompleted = true;
-                    return true;
+                const pinchDistance0 = this.getPinchDistance(hand0);
+                const pinchDistance1 = this.getPinchDistance(hand1);
+
+                if (pinchDistance0 !== null && pinchDistance1 !== null &&
+                    pinchDistance0 < PINCH_START_THRESHOLD && pinchDistance1 < PINCH_START_THRESHOLD &&
+                    hand0.pinchPointScreen && hand1.pinchPointScreen) {
+
+                    const dx = hand1.pinchPointScreen.x - hand0.pinchPointScreen.x;
+                    const dy = hand1.pinchPointScreen.y - hand0.pinchPointScreen.y;
+                    const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (this.scaleStartDistance === null) {
+                        this.scaleStartDistance = currentDistance;
+                    } else {
+                        const distanceChange = this.scaleStartDistance - currentDistance;
+                        if (distanceChange > this.scaleMovementThreshold) {
+                            this.stepCompleted = true;
+                            return true;
+                        }
+                    }
+                } else {
+                    this.scaleStartDistance = null;
                 }
             }
         }

@@ -180,7 +180,8 @@ export var Game = /*#__PURE__*/ function() {
         var _this = this;
         _class_call_check(this, Game);
         this.renderDiv = renderDiv;
-        this.selectedCharacter = selectedCharacter || 'red'; // Default to red if not specified
+        this.selectedCharacter = selectedCharacter || 'red'; // Default to 'red' if not provided
+        console.log('Game initialized with selectedCharacter:', this.selectedCharacter);
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -212,7 +213,7 @@ export var Game = /*#__PURE__*/ function() {
         this.smoothingFactor = 0.4; // Alpha for exponential smoothing (0 < alpha <= 1). Smaller = more smoothing.
         this.loadedModels = {};
         this.pandaModel = null; // Add reference for the Panda model
-        this.animationMixer = null; // For Stan model animations
+        this.animationMixer = null; // For model animations
         this.animationClips = []; // To store all animation clips from the model
         this.animationActions = {}; // To store animation actions by name or index
         this.currentAction = null; // To keep track of the currently playing animation action
@@ -226,9 +227,6 @@ export var Game = /*#__PURE__*/ function() {
         this.pickedUpModel = null; // Reference to the model being dragged
         this.modelDragOffset = new THREE.Vector3(); // Offset between model and pinch point in 3D
         this.modelGrabStartDepth = 0; // To store the model's Z depth when grabbed
-        this.loadedModels = []; // Array to store all loaded models
-        this.activeModelIndex = 0; // Index of the currently active model for interaction
-        this.modelHighlights = []; // Array to store highlight indicators for each model
         this.interactionMode = 'drag'; // 'drag', 'rotate', 'scale', 'animate' - Default to drag
         this.interactionModeButtons = {}; // To store references to mode buttons
         this.loadedDroppedModelData = null; // To temporarily store parsed GLTF data
@@ -333,36 +331,24 @@ export var Game = /*#__PURE__*/ function() {
                 this.renderDiv.style.width = '100vw'; // Use viewport units for fullscreen
                 this.renderDiv.style.height = '100vh';
                 this.renderDiv.style.overflow = 'hidden';
-                this.renderDiv.style.background = '#111'; // Fallback background
-                this.renderDiv.style.background = '#ffffff'; // White background
+                this.renderDiv.style.background = 'transparent'; // Empty background
                 // Start Screen Overlay and related DOM elements (title, instructions, loading text) removed.
                 // --- End Start Screen Overlay ---
                 this.videoElement = document.createElement('video');
                 this.videoElement.style.position = 'absolute';
-                this.videoElement.style.top = '0';
-                this.videoElement.style.left = '0';
-                this.videoElement.style.width = '100%';
-                this.videoElement.style.height = '100%';
+                this.videoElement.style.bottom = '10px';
+                this.videoElement.style.right = '10px';
+                this.videoElement.style.width = '250px'; // Fixed width for corner video
+                this.videoElement.style.height = '188px'; // Maintain 4:3 aspect ratio (250 * 3/4)
                 this.videoElement.style.objectFit = 'cover';
                 this.videoElement.style.transform = 'scaleX(-1)'; // Mirror view for intuitive control
+                this.videoElement.style.borderRadius = '8px'; // Rounded corners
+                this.videoElement.style.border = '2px solid rgba(255, 255, 255, 0.3)'; // Subtle border
+                this.videoElement.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)'; // Shadow for depth
                 this.videoElement.autoplay = true;
                 this.videoElement.muted = true; // Mute video to avoid feedback loops if audio was captured
                 this.videoElement.playsInline = true;
-                this.videoElement.style.zIndex = '0'; // Ensure video is behind THREE canvas
-                // Loom-style video in bottom-right corner
-                this.videoElement.style.bottom = '20px';
-                this.videoElement.style.right = '20px';
-                this.videoElement.style.width = '280px';
-                this.videoElement.style.height = '210px';
-                this.videoElement.style.objectFit = 'cover';
-                this.videoElement.style.transform = 'scaleX(-1)'; // Mirror view for intuitive control
-                this.videoElement.style.borderRadius = '12px';
-                this.videoElement.style.border = '3px solid #000';
-                this.videoElement.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-                this.videoElement.autoplay = true;
-                this.videoElement.muted = true; // Mute video to avoid feedback loops if audio was captured
-                this.videoElement.playsInline = true;
-                this.videoElement.style.zIndex = '50'; // Above everything to be visible
+                this.videoElement.style.zIndex = '1'; // Behind THREE canvas
                 this.renderDiv.appendChild(this.videoElement);
                 // Container for Status text (formerly Game Over) and restart hint
                 this.gameOverContainer = document.createElement('div');
@@ -469,7 +455,6 @@ export var Game = /*#__PURE__*/ function() {
                 });
                 this._updateInteractionModeButtonStyles(); // Apply initial styles
                 this._updateInstructionText(); // Set initial instruction text
-                // Model switching is now automatic based on hand proximity - no manual button needed
                 this._setupDragAndDrop(); // Add drag and drop listeners
             }
         },
@@ -492,7 +477,7 @@ export var Game = /*#__PURE__*/ function() {
                 this.renderer.domElement.style.position = 'absolute';
                 this.renderer.domElement.style.top = '0';
                 this.renderer.domElement.style.left = '0';
-                this.renderer.domElement.style.zIndex = '1'; // Canvas on top of video
+                this.renderer.domElement.style.zIndex = '2'; // Canvas on top of video (hand tips visible)
                 this.renderDiv.appendChild(this.renderer.domElement);
                 var ambientLight = new THREE.AmbientLight(0xffffff, 1.5); // Increased intensity
                 this.scene.add(ambientLight);
@@ -653,13 +638,13 @@ export var Game = /*#__PURE__*/ function() {
                                     ,
                                     4
                                 ]);
-                                // Load the selected character model
-                                var modelPath = "assets/".concat(_this.selectedCharacter, ".gltf");
                                 return [
                                     4,
                                     new Promise(function(resolve, reject) {
+                                        var modelPath = 'assets/' + _this.selectedCharacter + '.gltf';
+                                        console.log('Loading model from path:', modelPath);
                                         gltfLoader.load(modelPath, function(gltf) {
-                                            _this.pandaModel = gltf.scene;
+                                            _this.pandaModel = gltf.scene; // GLTFLoader returns an object with a 'scene' property
                                             _this.animationMixer = new THREE.AnimationMixer(_this.pandaModel);
                                             _this.animationClips = gltf.animations;
                                             if (_this.animationClips && _this.animationClips.length) {
@@ -670,22 +655,24 @@ export var Game = /*#__PURE__*/ function() {
                                                     // Create a button for this animation
                                                     var button = document.createElement('button');
                                                     button.innerText = actionName;
-                                                    button.style.padding = '5px 10px';
-                                                    button.style.fontSize = '13px';
-                                                    button.style.backgroundColor = '#f0f0f0';
+                                                    button.style.padding = '5px 10px'; // Adjusted padding
+                                                    button.style.fontSize = '13px'; // Consistent font size
+                                                    button.style.backgroundColor = '#f0f0f0'; // Light grey default
                                                     button.style.color = 'black';
-                                                    button.style.border = '2px solid black';
-                                                    button.style.borderRadius = '4px';
+                                                    button.style.border = '2px solid black'; // Black border
+                                                    button.style.borderRadius = '4px'; // Sharper corners
                                                     button.style.cursor = 'pointer';
                                                     button.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
-                                                    button.style.boxShadow = '2px 2px 0px black';
+                                                    button.style.boxShadow = '2px 2px 0px black'; // Default shadow
                                                     button.addEventListener('click', function() {
                                                         return _this._playAnimation(actionName);
                                                     });
                                                     _this.animationButtonsContainer.appendChild(button);
                                                     console.log("Loaded animation and created button for: ".concat(actionName));
                                                 });
-                                                var defaultActionName = Object.keys(_this.animationActions)[0];
+                                                // Play the first animation by default
+                                                // Try to find and play an "idle" animation by default
+                                                var defaultActionName = Object.keys(_this.animationActions)[0]; // Fallback to the first animation
                                                 var idleActionKey = Object.keys(_this.animationActions).find(function(name) {
                                                     return name.toLowerCase().includes('idle');
                                                 });
@@ -704,27 +691,40 @@ export var Game = /*#__PURE__*/ function() {
                                                     console.log("No animations found or default animation could not be played.");
                                                 }
                                             } else {
-                                                console.log(_this.selectedCharacter, " model has no embedded animations.");
+                                                console.log("Model has no embedded animations.");
                                             }
-                                            // Scale and position character based on model
+                                            // Scale and position the model based on bounding box
+                                            var box = new THREE.Box3().setFromObject(_this.pandaModel);
+                                            var size = box.getSize(new THREE.Vector3());
+                                            var center = box.getCenter(new THREE.Vector3());
+                                            var maxDimension = Math.max(size.x, size.y, size.z);
+                                            
+                                            // Different scales for different characters (matching preview logic)
                                             var scale;
                                             if (_this.selectedCharacter === 'bumblebee') {
-                                                scale = 6000; // Bumblebee is a Transformer - bigger than Red
-                                            } else if (_this.selectedCharacter === 'red') {
-                                                scale = 80; // Red is an Angry Bird - smaller
+                                                // Bumblebee is a Transformer - should be bigger
+                                                scale = 180 / maxDimension;
                                             } else {
-                                                scale = 80; // Default scale
+                                                // Red is an Angry Bird - smaller character
+                                                scale = 130 / maxDimension;
                                             }
+                                            
                                             _this.pandaModel.scale.set(scale, scale, scale);
+                                            
+                                            // Position the model: center horizontally, adjust Y based on model center, Z in front of hands
                                             var sceneHeight = _this.renderDiv.clientHeight;
-                                            _this.pandaModel.position.set(0, sceneHeight * -0.45, -1000);
-                                            _this.pandaModel.userData.modelName = _this.selectedCharacter;
+                                            _this.pandaModel.position.set(
+                                                -center.x * scale, 
+                                                -center.y * scale + (sceneHeight * -0.45), 
+                                                -1000
+                                            );
+                                            
                                             _this.scene.add(_this.pandaModel);
-                                            _this.loadedModels.push(_this.pandaModel);
-                                            console.log(_this.selectedCharacter, " GLTF model loaded and added to scene.");
+                                            console.log("GLTF model loaded and added to scene. Scale:", scale, "Position:", _this.pandaModel.position);
                                             resolve();
                                         }, undefined, function(error) {
-                                            console.error('An error occurred while loading the ', _this.selectedCharacter, ' GLTF model:', error);
+                                            console.error('An error occurred while loading the GLTF model for character "' + _this.selectedCharacter + '":', error);
+                                            console.error('Attempted to load:', modelPath);
                                             reject(error);
                                         });
                                     })
@@ -732,18 +732,6 @@ export var Game = /*#__PURE__*/ function() {
                             case 2:
                                 _state.sent();
                                 console.log("All specified assets loaded.");
-                                // Set the active model to the loaded character
-                                if (_this.loadedModels.length > 0) {
-                                    _this.pandaModel = _this.loadedModels[_this.activeModelIndex];
-                                    console.log("Active model set to: ".concat(_this.pandaModel.userData.modelName || 'Unknown'));
-
-                                    // Create highlight rings for each loaded model
-                                    for (var i = 0; i < _this.loadedModels.length; i++) {
-                                        var highlight = _this._createModelHighlight(_this.loadedModels[i]);
-                                        _this.modelHighlights.push(highlight);
-                                    }
-                                    console.log("Created ".concat(_this.modelHighlights.length, " model highlight indicators"));
-                                }
                                 return [
                                     3,
                                     4
@@ -760,131 +748,6 @@ export var Game = /*#__PURE__*/ function() {
                         }
                     });
                 })();
-            }
-        },
-        {
-            key: "_getActiveModel",
-            value: function _getActiveModel() {
-                // Return the currently active model, or fallback to pandaModel for compatibility
-                return this.loadedModels[this.activeModelIndex] || this.pandaModel;
-            }
-        },
-        {
-            key: "_getClosestModelToHand",
-            value: function _getClosestModelToHand(handScreenPos) {
-                if (this.loadedModels.length === 0) return null;
-                if (!handScreenPos) return this.loadedModels[this.activeModelIndex];
-
-                var closestModel = null;
-                var minDistance = Infinity;
-
-                // Iterar sobre todos los modelos cargados
-                for (var i = 0; i < this.loadedModels.length; i++) {
-                    var model = this.loadedModels[i];
-
-                    // Proyectar posición 3D del modelo a coordenadas de pantalla
-                    var modelPos3D = new THREE.Vector3();
-                    model.getWorldPosition(modelPos3D);
-
-                    // Convertir a coordenadas de pantalla (NDC)
-                    var modelPosScreen = modelPos3D.clone();
-                    modelPosScreen.project(this.camera);
-
-                    // Convertir de NDC (-1 a 1) a coordenadas de pantalla (origen en centro)
-                    var modelScreenX = modelPosScreen.x * (this.renderDiv.clientWidth / 2);
-                    var modelScreenY = modelPosScreen.y * (this.renderDiv.clientHeight / 2);
-
-                    // Calcular distancia 2D en pantalla
-                    var dx = handScreenPos.x - modelScreenX;
-                    var dy = handScreenPos.y - modelScreenY;
-                    var distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestModel = model;
-                    }
-                }
-
-                return closestModel;
-            }
-        },
-        {
-            key: "_createModelHighlight",
-            value: function _createModelHighlight(model) {
-                // Crear un círculo/halo debajo del modelo para indicar cuál está activo
-                var geometry = new THREE.RingGeometry(80, 100, 32);
-                var material = new THREE.MeshBasicMaterial({
-                    color: 0x00ff00,
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.0 // Invisible por defecto
-                });
-                var ring = new THREE.Mesh(geometry, material);
-
-                // Posicionar el anillo debajo del modelo
-                ring.position.copy(model.position);
-                ring.position.y -= 200; // Debajo del modelo
-                ring.rotation.x = Math.PI / 2; // Horizontal
-
-                this.scene.add(ring);
-                return ring;
-            }
-        },
-        {
-            key: "_updateModelHighlights",
-            value: function _updateModelHighlights() {
-                // Actualizar la opacidad de los halos según el modelo activo
-                for (var i = 0; i < this.modelHighlights.length; i++) {
-                    if (this.modelHighlights[i]) {
-                        var targetOpacity = (i === this.activeModelIndex) ? 0.6 : 0.0;
-                        // Suavizar la transición
-                        this.modelHighlights[i].material.opacity += (targetOpacity - this.modelHighlights[i].material.opacity) * 0.1;
-
-                        // Animación de pulso para el modelo activo
-                        if (i === this.activeModelIndex) {
-                            var time = Date.now() * 0.003;
-                            var scale = 1.0 + Math.sin(time) * 0.1;
-                            this.modelHighlights[i].scale.set(scale, scale, 1);
-                        } else {
-                            this.modelHighlights[i].scale.set(1, 1, 1);
-                        }
-                    }
-                }
-            }
-        },
-        {
-            key: "_updateActiveModelByProximity",
-            value: function _updateActiveModelByProximity() {
-                // Encontrar la mano activa (la primera que esté visible)
-                var activeHand = null;
-                var handScreenPos = null;
-
-                for (var i = 0; i < this.hands.length; i++) {
-                    if (this.hands[i].landmarks && this.hands[i].landmarks.length > 0) {
-                        activeHand = this.hands[i];
-                        handScreenPos = new THREE.Vector2(
-                            this.hands[i].pinchPointScreen.x,
-                            this.hands[i].pinchPointScreen.y
-                        );
-                        break; // Usar la primera mano visible
-                    }
-                }
-
-                if (!handScreenPos) return; // No hay manos visibles
-
-                // Encontrar el modelo más cercano
-                var closestModel = this._getClosestModelToHand(handScreenPos);
-
-                if (closestModel) {
-                    // Actualizar el índice activo
-                    var newIndex = this.loadedModels.indexOf(closestModel);
-                    if (newIndex !== -1 && newIndex !== this.activeModelIndex) {
-                        this.activeModelIndex = newIndex;
-                        this.pandaModel = closestModel;
-                        console.log("%c🎯 Active Model: ".concat(closestModel.userData.modelName || 'Unknown'),
-                                    "background: #4CAF50; color: white; padding: 5px 10px; border-radius: 3px; font-weight: bold;");
-                    }
-                }
             }
         },
         {
@@ -949,10 +812,7 @@ export var Game = /*#__PURE__*/ function() {
                                     new Promise(function(resolve) {
                                         _this.videoElement.onloadedmetadata = function() {
                                             console.log("Webcam metadata loaded.");
-                                            // Adjust video size slightly after metadata is loaded if needed, but CSS handles most
-                                            _this.videoElement.style.width = _this.renderDiv.clientWidth + 'px';
-                                            _this.videoElement.style.height = _this.renderDiv.clientHeight + 'px';
-                                            // Video size is fixed at 280x210px (Loom-style) - no need to adjust
+                                            // Video size is fixed in corner, no resize needed
                                             resolve();
                                         };
                                     })
@@ -1166,7 +1026,7 @@ export var Game = /*#__PURE__*/ function() {
                                         }
                                     } else {
                                         if (prevIsPinching && _this1.grabbingHandIndex === i) {
-                                            console.log("Hand ".concat(i, " RELEASED Stan model (Drag mode) at position:"), _this1.pickedUpModel.position);
+                                            console.log("Hand ".concat(i, " RELEASED model (Drag mode) at position:"), _this1.pickedUpModel.position);
                                             _this1.grabbingHandIndex = -1;
                                             _this1.pickedUpModel = null;
                                         // if (this.grabMarker && this.pandaModel) this.grabMarker.visible = true; // Show marker when released - Grab marker removed
@@ -1481,9 +1341,7 @@ export var Game = /*#__PURE__*/ function() {
                 this.camera.updateProjectionMatrix();
                 // Update renderer size
                 this.renderer.setSize(width, height);
-                // Update video element size
-                this.videoElement.style.width = width + 'px';
-                this.videoElement.style.height = height + 'px';
+                // Keep video element in corner with fixed size (no resize needed)
             // Watermelon, Chad, GroundLine updates removed.
             }
         },
@@ -1617,18 +1475,10 @@ export var Game = /*#__PURE__*/ function() {
                 // Update hands if tracking
                 if (this.gameState === 'tracking') {
                     this._updateHands();
-                    // Auto-switch model based on hand proximity
-                    if (this.loadedModels.length > 1) {
-                        this._updateActiveModelByProximity();
-                    }
                 }
                 // Update animation mixer
                 if (this.animationMixer) {
                     this.animationMixer.update(deltaTime);
-                }
-                // Update model highlight indicators
-                if (this.modelHighlights.length > 0) {
-                    this._updateModelHighlights();
                 }
                 // Bounding box helper visibility logic REMOVED
                 // _updateGhosts and _updateParticles calls removed.
@@ -2099,3 +1949,4 @@ export var Game = /*#__PURE__*/ function() {
     ]);
     return Game;
 }();
+//oscar

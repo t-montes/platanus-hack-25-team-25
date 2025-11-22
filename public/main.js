@@ -77,7 +77,9 @@ var selectButtons = document.querySelectorAll('.select-btn');
 selectButtons.forEach(function(button) {
     button.addEventListener('click', function(e) {
         var card = e.target.closest('.character-card');
-        selectedCharacter = card.getAttribute('data-character');
+        var chosenCharacter = card.getAttribute('data-character');
+        selectedCharacter = chosenCharacter; // Also update the global variable
+        console.log('Character selected:', chosenCharacter);
 
         // Hide character selection screen
         characterSelection.style.display = 'none';
@@ -90,7 +92,8 @@ selectButtons.forEach(function(button) {
             if (!renderDiv) {
                 console.error('Fatal Error: renderDiv element not found.');
             } else {
-                game = new Game(renderDiv, selectedCharacter);
+                console.log('Initializing Game with character:', chosenCharacter);
+                game = new Game(renderDiv, chosenCharacter);
                 game.start();
             }
         }, 100);

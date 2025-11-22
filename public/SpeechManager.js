@@ -191,7 +191,6 @@ export var SpeechManager = /*#__PURE__*/ function() {
                             'animar': 'animate',
                             'animación': 'animate',
                             'anima': 'animate',
-                            'dragón': 'dragon',
                             'saludo': 'greet',
                             'saluda': 'greet',
                             'saludar': 'greet'

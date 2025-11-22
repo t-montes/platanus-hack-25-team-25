@@ -1815,11 +1815,6 @@ export var Game = /*#__PURE__*/ function() {
                         if (finalTranscript) {
                             _this.speechBubble.innerHTML = finalTranscript;
                             _this.speechBubble.style.opacity = '1';
-                            var transcriptLower = finalTranscript.toLowerCase();
-                            if (transcriptLower.includes('dragon')) {
-                                _this._createDragon();
-                            }
-                            // Send transcript to backend and play audio response
                             _this._sendToBackendAndPlay(finalTranscript);
                             _this.speechBubbleTimeout = setTimeout(function() {
                                 _this.speechBubble.innerHTML = "...";
@@ -1852,8 +1847,6 @@ export var Game = /*#__PURE__*/ function() {
                     ];
                     if (validCommands.includes(command.toLowerCase())) {
                         _this._setInteractionMode(command.toLowerCase());
-                    } else if (command.toLowerCase() === 'dragon') {
-                        _this._createDragon();
                     } else if (command.toLowerCase() === 'greet') {
                         _this._playAnimation('TensionFrontWave', true);
                     }
@@ -1872,6 +1865,22 @@ export var Game = /*#__PURE__*/ function() {
             value: function _sendToBackendAndPlay(text) {
                 var _this = this;
                 if (!text || !text.trim()) return;
+                
+                var sceneObjects = [];
+                if (this.dragonModel && this.scene && this.scene.children.includes(this.dragonModel)) {
+                    sceneObjects.push('dragón');
+                }
+                
+                var sceneContext = {
+                    character: this.selectedCharacter,
+                    background: this.selectedBackground,
+                    objects: sceneObjects
+                };
+                
+                console.log('=== Sending to backend ===');
+                console.log('Text:', text);
+                console.log('Scene context:', sceneContext);
+                
                 fetch("".concat(this.backendUrl, "/speak"), {
                     method: "POST",
                     headers: {
@@ -1879,24 +1888,51 @@ export var Game = /*#__PURE__*/ function() {
                     },
                     body: JSON.stringify({
                         text: text,
-                        conversationId: this.conversationId
+                        conversationId: this.conversationId,
+                        sceneContext: sceneContext
                     })
                 }).then(function(response) {
+                    console.log('Response status:', response.status);
                     if (!response.ok) {
                         throw new Error("Backend error: ".concat(response.status));
                     }
                     return response.json();
                 }).then(function(data) {
+                    console.log('=== Backend response received ===');
+                    console.log('Has audio:', !!data.audioB64);
+                    console.log('Reply text:', data.replyText);
+                    console.log('Command:', data.command);
+                    
                     if (data.audioB64) {
-                        // Convert base64 to audio and play immediately
                         var audio = new Audio("data:".concat(data.audioMime || "audio/mpeg", ";base64,").concat(data.audioB64));
                         audio.play().catch(function(err) {
                             console.error("Error playing audio:", err);
                         });
                     }
+                    
+                    if (data.command) {
+                        console.log('Executing command:', data.command);
+                        _this._handleIntentCommand(data.command);
+                    } else {
+                        console.log('No command in response');
+                    }
+                    console.log('=== End of backend response handling ===\n');
                 }).catch(function(error) {
                     console.error("Error sending to backend:", error);
                 });
+            }
+        },
+        {
+            key: "_handleIntentCommand",
+            value: function _handleIntentCommand(command) {
+                console.log('Executing intent command:', command);
+                switch(command.toLowerCase()) {
+                    case 'dragon':
+                        this._createDragon();
+                        break;
+                    default:
+                        console.warn('Unknown intent command:', command);
+                }
             }
         },
         {

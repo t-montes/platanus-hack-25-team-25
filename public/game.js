@@ -174,6 +174,7 @@ import { GLTFLoader } from 'three/loaders/GLTFLoader.js';
 import { HandLandmarker, FilesetResolver } from 'https://esm.sh/@mediapipe/tasks-vision@0.10.14';
 import { AudioManager } from './audioManager.js'; // Import the AudioManager
 import { SpeechManager } from './SpeechManager.js'; // Import SpeechManager
+import { OnboardingHands } from './OnboardingHands.js'; // Import OnboardingHands
 
 export var Game = /*#__PURE__*/ function() {
     "use strict";
@@ -225,6 +226,7 @@ export var Game = /*#__PURE__*/ function() {
         this.speechManager = null;
         this.speechBubble = null;
         this.speechBubbleTimeout = null;
+        this.onboardingText = null; // Text element for onboarding instructions
         this.isSpeechActive = false; // Track if speech recognition is active for styling
         this.backendUrl = 'http://localhost:3000'; // Backend URL
         this.conversationId = 'default'; // Conversation ID for backend
@@ -277,6 +279,9 @@ export var Game = /*#__PURE__*/ function() {
         this.animationControlHandIndex = -1; // Index of the hand controlling animation scrolling
         this.animationControlInitialPinchY = null; // Initial Y position of the pinch for animation scrolling
         this.animationScrollThreshold = 40; // Pixels of vertical movement to trigger an animation change (Reduced from 50)
+        // Onboarding system
+        this.onboardingHands = null;
+        this.onboardingCompleted = false;
         // Initialize asynchronously
         this._init().catch(function(error) {
             console.error("Initialization failed:", error);
@@ -320,6 +325,19 @@ export var Game = /*#__PURE__*/ function() {
                                 window.addEventListener('resize', _this._onResize.bind(_this));
                                 _this.gameState = 'tracking';
                                 _this._animate();
+                                // Start onboarding
+                                if (_this.onboardingHands) {
+                                    _this.onboardingHands.startDragOnboarding();
+                                    console.log('Onboarding started: drag gesture');
+                                    // Show onboarding text
+                                    if (_this.onboardingText) {
+                                        _this.onboardingText.innerHTML = _this.onboardingHands.getCurrentInstructionText();
+                                        _this.onboardingText.style.display = 'block';
+                                        setTimeout(function() {
+                                            _this.onboardingText.style.opacity = '1';
+                                        }, 100);
+                                    }
+                                }
                                 // Call the ready callback if provided
                                 if (_this.onReadyCallback) {
                                     _this.onReadyCallback();
@@ -420,6 +438,33 @@ export var Game = /*#__PURE__*/ function() {
                 this.speechBubble.style.pointerEvents = 'none';
                 this.speechBubble.innerHTML = "...";
                 this.gameContainer.appendChild(this.speechBubble);
+
+                // Onboarding instruction text (below speech bubble)
+                this.onboardingText = document.createElement('div');
+                this.onboardingText.id = 'onboarding-text';
+                this.onboardingText.style.position = 'absolute';
+                this.onboardingText.style.top = '80px'; // Debajo del speech bubble
+                this.onboardingText.style.left = '50%';
+                this.onboardingText.style.transform = 'translateX(-50%)';
+                this.onboardingText.style.padding = '20px 30px';
+                this.onboardingText.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                this.onboardingText.style.border = '3px solid black';
+                this.onboardingText.style.borderRadius = '8px';
+                this.onboardingText.style.boxShadow = '6px 6px 0px rgba(0,0,0,1)';
+                this.onboardingText.style.color = '#000';
+                this.onboardingText.style.fontFamily = '"Arial Black", "Arial Bold", Arial, sans-serif';
+                this.onboardingText.style.fontSize = 'clamp(20px, 4vw, 28px)';
+                this.onboardingText.style.fontWeight = 'bold';
+                this.onboardingText.style.maxWidth = '85%';
+                this.onboardingText.style.textAlign = 'center';
+                this.onboardingText.style.zIndex = '26'; // Above speech bubble
+                this.onboardingText.style.opacity = '0'; // Hidden initially
+                this.onboardingText.style.transition = 'opacity 0.5s ease-in-out';
+                this.onboardingText.style.pointerEvents = 'none';
+                this.onboardingText.innerHTML = ""; // Will be set when onboarding starts
+                this.onboardingText.style.display = 'none'; // Hidden by default
+                this.gameContainer.appendChild(this.onboardingText);
+
                 // Animation buttons container
                 this.animationButtonsContainer = document.createElement('div');
                 this.animationButtonsContainer.id = 'animation-buttons-container';
@@ -651,6 +696,9 @@ export var Game = /*#__PURE__*/ function() {
                         17
                     ] // Connect base of fingers
                 ];
+                // Initialize OnboardingHands system
+                this.onboardingHands = new OnboardingHands(this.scene, this.camera);
+                console.log('OnboardingHands initialized');
             }
         },
         {
@@ -1521,6 +1569,51 @@ export var Game = /*#__PURE__*/ function() {
                 // Update animation mixer
                 if (this.animationMixer) {
                     this.animationMixer.update(deltaTime);
+                }
+                // Update onboarding animation
+                if (this.onboardingHands && !this.onboardingCompleted) {
+                    this.onboardingHands.update(deltaTime);
+                    // Check if user completed the current gesture
+                    if (this.onboardingHands.checkUserCompletion(this.hands)) {
+                        console.log('Onboarding step completed:', this.onboardingHands.currentStep);
+
+                        // Ocultar las manos de onboarding inmediatamente
+                        this.onboardingHands.leftHandGroup.visible = false;
+                        this.onboardingHands.rightHandGroup.visible = false;
+
+                        // Add delay before transitioning to next step
+                        var _this = this;
+                        setTimeout(function() {
+                            // Try to advance to next step
+                            var hasNextStep = _this.onboardingHands.nextStep();
+                            if (hasNextStep) {
+                                // Change interaction mode based on the new step
+                                var newStep = _this.onboardingHands.currentStep;
+                                if (newStep === 'scaleUp' || newStep === 'scaleDown') {
+                                    _this._setInteractionMode('scale');
+                                } else if (newStep === 'drag') {
+                                    _this._setInteractionMode('drag');
+                                }
+
+                                // Update instruction text for next step
+                                if (_this.onboardingText) {
+                                    _this.onboardingText.innerHTML = _this.onboardingHands.getCurrentInstructionText();
+                                }
+                            } else {
+                                // All steps completed
+                                console.log('Onboarding fully completed!');
+                                _this.onboardingCompleted = true;
+                                _this.onboardingHands.stop();
+                                // Hide onboarding text
+                                if (_this.onboardingText) {
+                                    _this.onboardingText.style.opacity = '0';
+                                    setTimeout(function() {
+                                        _this.onboardingText.style.display = 'none';
+                                    }, 500);
+                                }
+                            }
+                        }, 1200); // 1.2 segundos de delay
+                    }
                 }
                 // Bounding box helper visibility logic REMOVED
                 // _updateGhosts and _updateParticles calls removed.

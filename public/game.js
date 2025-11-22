@@ -219,6 +219,9 @@ export var Game = /*#__PURE__*/ function() {
         this.loadedModels = {};
         this.pandaModel = null; // Add reference for the Panda model
         this.dragonModel = null; // Add reference for the Dragon model
+        this.monkeyModel = null; // Add reference for the Monkey model
+        this.platanoModel = null; // Add reference for the Platano model
+        this.astronautModel = null; // Add reference for the Astronaut model
         this.interactiveModels = []; // Array to track all interactive models in the scene
         this.animationMixer = null; // For model animations
         this.animationClips = []; // To store all animation clips from the model
@@ -1854,6 +1857,12 @@ export var Game = /*#__PURE__*/ function() {
                         _this._setInteractionMode(command.toLowerCase());
                     } else if (command.toLowerCase() === 'dragon') {
                         _this._createDragon();
+                    } else if (command.toLowerCase() === 'monkey') {
+                        _this._createMonkey();
+                    } else if (command.toLowerCase() === 'platano') {
+                        _this._createPlatano();
+                    } else if (command.toLowerCase() === 'astronaut') {
+                        _this._createAstronaut();
                     } else if (command.toLowerCase() === 'greet') {
                         _this._playAnimation('TensionFrontWave', true);
                     }
@@ -2293,9 +2302,7 @@ export var Game = /*#__PURE__*/ function() {
                 }
                 console.log('Loading dragon model...');
                 var gltfLoader = new GLTFLoader();
-                var modelPath = 'assets/dragon.gltf';
-                gltfLoader.setPath('assets/');
-                gltfLoader.load('dragon.gltf', function(gltf) {
+                gltfLoader.load('assets/dragon.gltf', function(gltf) {
                     _this.dragonModel = gltf.scene;
                     var box = new THREE.Box3().setFromObject(_this.dragonModel);
                     var size = box.getSize(new THREE.Vector3());
@@ -2329,6 +2336,138 @@ export var Game = /*#__PURE__*/ function() {
                     }
                 }, undefined, function(error) {
                     console.error('Error loading dragon model:', error);
+                });
+            }
+        },
+        {
+            key: "_createMonkey",
+            value: function _createMonkey() {
+                var _this = this;
+                if (this.monkeyModel && this.scene && this.scene.children.includes(this.monkeyModel)) {
+                    return;
+                }
+                var gltfLoader = new GLTFLoader();
+                gltfLoader.load('assets/monkey.gltf', function(gltf) {
+                    _this.monkeyModel = gltf.scene;
+                    var box = new THREE.Box3().setFromObject(_this.monkeyModel);
+                    var size = box.getSize(new THREE.Vector3());
+                    var center = box.getCenter(new THREE.Vector3());
+                    var scale = 150 / Math.max(size.x, size.y, size.z);
+                    _this.monkeyModel.scale.set(0.01, 0.01, 0.01);
+                    _this.monkeyModel.position.set(
+                        -center.x * scale - 200,
+                        -center.y * scale,
+                        -800
+                    );
+                    if (_this.scene) {
+                        _this.scene.add(_this.monkeyModel);
+                        _this.interactiveModels.push(_this.monkeyModel);
+                        var startTime = Date.now();
+                        var duration = 1000;
+                        var targetScale = scale;
+                        var animateMonkeyEntrance = function() {
+                            var elapsed = Date.now() - startTime;
+                            var progress = Math.min(elapsed / duration, 1);
+                            var easeProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                            var currentScale = 0.01 + (targetScale - 0.01) * easeProgress;
+                            _this.monkeyModel.scale.set(currentScale, currentScale, currentScale);
+                            _this.monkeyModel.rotation.y = easeProgress * Math.PI * 2;
+                            if (progress < 1) {
+                                requestAnimationFrame(animateMonkeyEntrance);
+                            }
+                        };
+                        animateMonkeyEntrance();
+                    }
+                }, undefined, function(error) {
+                    console.error('Error loading monkey model:', error);
+                });
+            }
+        },
+        {
+            key: "_createPlatano",
+            value: function _createPlatano() {
+                var _this = this;
+                if (this.platanoModel && this.scene && this.scene.children.includes(this.platanoModel)) {
+                    return;
+                }
+                var gltfLoader = new GLTFLoader();
+                gltfLoader.load('assets/platano.gltf', function(gltf) {
+                    _this.platanoModel = gltf.scene;
+                    var box = new THREE.Box3().setFromObject(_this.platanoModel);
+                    var size = box.getSize(new THREE.Vector3());
+                    var center = box.getCenter(new THREE.Vector3());
+                    var scale = 150 / Math.max(size.x, size.y, size.z);
+                    _this.platanoModel.scale.set(0.01, 0.01, 0.01);
+                    _this.platanoModel.position.set(
+                        -center.x * scale,
+                        -center.y * scale + 200,
+                        -800
+                    );
+                    if (_this.scene) {
+                        _this.scene.add(_this.platanoModel);
+                        _this.interactiveModels.push(_this.platanoModel);
+                        var startTime = Date.now();
+                        var duration = 1000;
+                        var targetScale = scale;
+                        var animatePlatanoEntrance = function() {
+                            var elapsed = Date.now() - startTime;
+                            var progress = Math.min(elapsed / duration, 1);
+                            var easeProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                            var currentScale = 0.01 + (targetScale - 0.01) * easeProgress;
+                            _this.platanoModel.scale.set(currentScale, currentScale, currentScale);
+                            _this.platanoModel.rotation.y = easeProgress * Math.PI * 2;
+                            if (progress < 1) {
+                                requestAnimationFrame(animatePlatanoEntrance);
+                            }
+                        };
+                        animatePlatanoEntrance();
+                    }
+                }, undefined, function(error) {
+                    console.error('Error loading platano model:', error);
+                });
+            }
+        },
+        {
+            key: "_createAstronaut",
+            value: function _createAstronaut() {
+                var _this = this;
+                if (this.astronautModel && this.scene && this.scene.children.includes(this.astronautModel)) {
+                    return;
+                }
+                var gltfLoader = new GLTFLoader();
+                gltfLoader.load('assets/astronaut.gltf', function(gltf) {
+                    _this.astronautModel = gltf.scene;
+                    var box = new THREE.Box3().setFromObject(_this.astronautModel);
+                    var size = box.getSize(new THREE.Vector3());
+                    var center = box.getCenter(new THREE.Vector3());
+                    var scale = 150 / Math.max(size.x, size.y, size.z);
+                    _this.astronautModel.scale.set(0.01, 0.01, 0.01);
+                    _this.astronautModel.position.set(
+                        -center.x * scale,
+                        -center.y * scale - 200,
+                        -800
+                    );
+                    if (_this.scene) {
+                        _this.scene.add(_this.astronautModel);
+                        _this.interactiveModels.push(_this.astronautModel);
+                        var startTime = Date.now();
+                        var duration = 1000;
+                        var targetScale = scale;
+                        var animateAstronautEntrance = function() {
+                            var elapsed = Date.now() - startTime;
+                            var progress = Math.min(elapsed / duration, 1);
+                            var easeProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                            var currentScale = 0.01 + (targetScale - 0.01) * easeProgress;
+                            _this.astronautModel.scale.set(currentScale, currentScale, currentScale);
+                            _this.astronautModel.rotation.y = easeProgress * Math.PI * 2;
+                            if (progress < 1) {
+                                requestAnimationFrame(animateAstronautEntrance);
+                            }
+                        };
+                        animateAstronautEntrance();
+                    }
+                }, undefined, function(error) {
+                    console.error('Error loading astronaut model:', error);
                 });
             }
         }

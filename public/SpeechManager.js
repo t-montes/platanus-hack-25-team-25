@@ -194,7 +194,20 @@ export var SpeechManager = /*#__PURE__*/ function() {
                             'dragón': 'dragon',
                             'saludo': 'greet',
                             'saluda': 'greet',
-                            'saludar': 'greet'
+                            'saludar': 'greet',
+                            'mono': 'monkey',
+                            'monkey': 'monkey',
+                            'chango': 'monkey',
+                            'simio': 'monkey',
+                            'plátano': 'platano',
+                            'platano': 'platano',
+                            'banana': 'platano',
+                            'banano': 'platano',
+                            'platanus': 'platano',
+                            'astronauta': 'astronaut',
+                            'astronaut': 'astronaut',
+                            'astronautas': 'astronaut',
+                            'cosmonauta': 'astronaut'
                         };
                         var spokenCommands = Object.keys(commandMap);
                         var _iteratorNormalCompletion = true, _didIteratorError = false, _iteratorError = undefined;

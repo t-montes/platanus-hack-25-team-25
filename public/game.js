@@ -1844,7 +1844,6 @@ export var Game = /*#__PURE__*/ function() {
                     _this.isSpeechActive = isActive;
                     _this._updateSpeechBubbleAppearance();
                 }, function(command) {
-                    console.log("Game received command: ".concat(command));
                     var validCommands = [
                         'drag',
                         'rotate',
@@ -1855,8 +1854,8 @@ export var Game = /*#__PURE__*/ function() {
                         _this._setInteractionMode(command.toLowerCase());
                     } else if (command.toLowerCase() === 'dragon') {
                         _this._createDragon();
-                    } else {
-                        console.warn("Unrecognized command via speech: ".concat(command));
+                    } else if (command.toLowerCase() === 'greet') {
+                        _this._playAnimation('TensionFrontWave', true);
                     }
                 });
                 // Initialize speech bubble with "..." and apply initial appearance
@@ -1902,7 +1901,8 @@ export var Game = /*#__PURE__*/ function() {
         },
         {
             key: "_playAnimation",
-            value: function _playAnimation(name) {
+            value: function _playAnimation(name, playOnce) {
+                if (playOnce === void 0) playOnce = false;
                 if (name === 'None') {
                     if (this.currentAction) {
                         this.currentAction.fadeOut(0.5);
@@ -1921,13 +1921,43 @@ export var Game = /*#__PURE__*/ function() {
                     console.log('Animation "'.concat(name, '" is already playing.'));
                     return; // Already playing this animation
                 }
-                if (this.currentAction) {
+
+                // Store the previous action to return to after one-shot animation
+                var previousAction = playOnce ? this.currentAction : null;
+
+                if (this.currentAction && !playOnce) {
                     this.currentAction.fadeOut(0.5); // Fade out current animation over 0.5 seconds
                 }
+
+                // Configure animation loop mode
+                if (playOnce) {
+                    newAction.setLoop(THREE.LoopOnce);
+                    newAction.clampWhenFinished = true;
+
+                    // Return to previous animation when finished
+                    var _this = this;
+                    var onFinished = function(e) {
+                        if (e.action === newAction) {
+                            _this.animationMixer.removeEventListener('finished', onFinished);
+                            if (previousAction && previousAction !== newAction) {
+                                _this.currentAction = previousAction;
+                                _this._updateButtonStyles(previousAction._clip.name);
+                            }
+                        }
+                    };
+                    this.animationMixer.addEventListener('finished', onFinished);
+                } else {
+                    newAction.setLoop(THREE.LoopRepeat);
+                }
+
                 newAction.reset().fadeIn(0.5).play(); // Reset, fade in and play new animation
-                this.currentAction = newAction;
-                console.log("Playing animation: ".concat(name));
-                this._updateButtonStyles(name);
+                if (!playOnce) {
+                    this.currentAction = newAction;
+                }
+                console.log("Playing animation: ".concat(name, playOnce ? ' (once)' : ' (loop)'));
+                if (!playOnce) {
+                    this._updateButtonStyles(name);
+                }
             }
         },
         {

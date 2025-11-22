@@ -191,7 +191,10 @@ export var SpeechManager = /*#__PURE__*/ function() {
                             'animar': 'animate',
                             'animación': 'animate',
                             'anima': 'animate',
-                            'dragón': 'dragon'
+                            'dragón': 'dragon',
+                            'saludo': 'greet',
+                            'saluda': 'greet',
+                            'saludar': 'greet'
                         };
                         var spokenCommands = Object.keys(commandMap);
                         var _iteratorNormalCompletion = true, _didIteratorError = false, _iteratorError = undefined;

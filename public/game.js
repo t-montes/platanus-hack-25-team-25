@@ -176,10 +176,11 @@ import { AudioManager } from './audioManager.js'; // Import the AudioManager
 import { SpeechManager } from './SpeechManager.js'; // Import SpeechManager
 export var Game = /*#__PURE__*/ function() {
     "use strict";
-    function Game(renderDiv) {
+    function Game(renderDiv, selectedCharacter) {
         var _this = this;
         _class_call_check(this, Game);
         this.renderDiv = renderDiv;
+        this.selectedCharacter = selectedCharacter || 'red'; // Default to red if not specified
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -652,100 +653,87 @@ export var Game = /*#__PURE__*/ function() {
                                     ,
                                     4
                                 ]);
-                                // Load models - add more models to the array to load them in parallel
+                                // Load the selected character model
+                                var modelPath = "assets/".concat(_this.selectedCharacter, ".gltf");
+                                console.log("Loading selected character: ".concat(_this.selectedCharacter, " from ").concat(modelPath));
                                 return [
                                     4,
-                                    Promise.all([
-                                        // Load Stan model
-                                        new Promise(function(resolve, reject) {
-                                            gltfLoader.load('assets/Stan.gltf', function(gltf) {
-                                                _this.pandaModel = gltf.scene;
-                                                _this.animationMixer = new THREE.AnimationMixer(_this.pandaModel);
-                                                _this.animationClips = gltf.animations;
-                                                if (_this.animationClips && _this.animationClips.length) {
-                                                    _this.animationClips.forEach(function(clip, index) {
-                                                        var action = _this.animationMixer.clipAction(clip);
-                                                        var actionName = clip.name || "Animation ".concat(index + 1);
-                                                        _this.animationActions[actionName] = action;
-                                                        // Create a button for this animation
-                                                        var button = document.createElement('button');
-                                                        button.innerText = actionName;
-                                                        button.style.padding = '5px 10px';
-                                                        button.style.fontSize = '13px';
-                                                        button.style.backgroundColor = '#f0f0f0';
-                                                        button.style.color = 'black';
-                                                        button.style.border = '2px solid black';
-                                                        button.style.borderRadius = '4px';
-                                                        button.style.cursor = 'pointer';
-                                                        button.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
-                                                        button.style.boxShadow = '2px 2px 0px black';
-                                                        button.addEventListener('click', function() {
-                                                            return _this._playAnimation(actionName);
-                                                        });
-                                                        _this.animationButtonsContainer.appendChild(button);
-                                                        console.log("Loaded animation and created button for: ".concat(actionName));
+                                    new Promise(function(resolve, reject) {
+                                        gltfLoader.load(modelPath, function(gltf) {
+                                            _this.pandaModel = gltf.scene;
+                                            _this.animationMixer = new THREE.AnimationMixer(_this.pandaModel);
+                                            _this.animationClips = gltf.animations;
+                                            if (_this.animationClips && _this.animationClips.length) {
+                                                _this.animationClips.forEach(function(clip, index) {
+                                                    var action = _this.animationMixer.clipAction(clip);
+                                                    var actionName = clip.name || "Animation ".concat(index + 1);
+                                                    _this.animationActions[actionName] = action;
+                                                    // Create a button for this animation
+                                                    var button = document.createElement('button');
+                                                    button.innerText = actionName;
+                                                    button.style.padding = '5px 10px';
+                                                    button.style.fontSize = '13px';
+                                                    button.style.backgroundColor = '#f0f0f0';
+                                                    button.style.color = 'black';
+                                                    button.style.border = '2px solid black';
+                                                    button.style.borderRadius = '4px';
+                                                    button.style.cursor = 'pointer';
+                                                    button.style.transition = 'background-color 0.2s ease, box-shadow 0.2s ease';
+                                                    button.style.boxShadow = '2px 2px 0px black';
+                                                    button.addEventListener('click', function() {
+                                                        return _this._playAnimation(actionName);
                                                     });
-                                                    var defaultActionName = Object.keys(_this.animationActions)[0];
-                                                    var idleActionKey = Object.keys(_this.animationActions).find(function(name) {
-                                                        return name.toLowerCase().includes('idle');
-                                                    });
-                                                    if (idleActionKey) {
-                                                        defaultActionName = idleActionKey;
-                                                        console.log("Found idle animation: ".concat(defaultActionName));
-                                                    } else if (defaultActionName) {
-                                                        console.log("No specific idle animation found, defaulting to first animation: ".concat(defaultActionName));
-                                                    }
-                                                    if (defaultActionName && _this.animationActions[defaultActionName]) {
-                                                        _this.currentAction = _this.animationActions[defaultActionName];
-                                                        _this.currentAction.play();
-                                                        console.log("Playing default animation: ".concat(defaultActionName));
-                                                        _this._updateButtonStyles(defaultActionName);
-                                                    } else {
-                                                        console.log("No animations found or default animation could not be played.");
-                                                    }
-                                                } else {
-                                                    console.log("Stan model has no embedded animations.");
+                                                    _this.animationButtonsContainer.appendChild(button);
+                                                    console.log("Loaded animation and created button for: ".concat(actionName));
+                                                });
+                                                var defaultActionName = Object.keys(_this.animationActions)[0];
+                                                var idleActionKey = Object.keys(_this.animationActions).find(function(name) {
+                                                    return name.toLowerCase().includes('idle');
+                                                });
+                                                if (idleActionKey) {
+                                                    defaultActionName = idleActionKey;
+                                                    console.log("Found idle animation: ".concat(defaultActionName));
+                                                } else if (defaultActionName) {
+                                                    console.log("No specific idle animation found, defaulting to first animation: ".concat(defaultActionName));
                                                 }
-                                                // Scale and position Stan (left side)
-                                                var scale = 80;
-                                                _this.pandaModel.scale.set(scale, scale, scale);
-                                                var sceneHeight = _this.renderDiv.clientHeight;
-                                                _this.pandaModel.position.set(-300, sceneHeight * -0.45, -1000);
-                                                _this.pandaModel.userData.modelName = 'Stan';
-                                                _this.scene.add(_this.pandaModel);
-                                                _this.loadedModels.push(_this.pandaModel);
-                                                console.log("Stan GLTF model loaded and added to scene.");
-                                                resolve();
-                                            }, undefined, function(error) {
-                                                console.error('An error occurred while loading the Stan GLTF model:', error);
-                                                reject(error);
-                                            });
-                                        }),
-                                        // Load Bed model
-                                        new Promise(function(resolve, reject) {
-                                            gltfLoader.load('assets/scene.gltf', function(gltf) {
-                                                _this.bedModel = gltf.scene;
-                                                // Scale and position Bed (right side)
-                                                var bedScale = 150;
-                                                _this.bedModel.scale.set(bedScale, bedScale, bedScale);
-                                                var sceneHeight = _this.renderDiv.clientHeight;
-                                                _this.bedModel.position.set(300, sceneHeight * -0.45, -1000);
-                                                _this.bedModel.userData.modelName = 'Bed';
-                                                _this.scene.add(_this.bedModel);
-                                                _this.loadedModels.push(_this.bedModel);
-                                                console.log("Bed GLTF model loaded and added to scene.");
-                                                resolve();
-                                            }, undefined, function(error) {
-                                                console.error('An error occurred while loading the Bed GLTF model:', error);
-                                                reject(error);
-                                            });
-                                        })
-                                    ])
+                                                if (defaultActionName && _this.animationActions[defaultActionName]) {
+                                                    _this.currentAction = _this.animationActions[defaultActionName];
+                                                    _this.currentAction.play();
+                                                    console.log("Playing default animation: ".concat(defaultActionName));
+                                                    _this._updateButtonStyles(defaultActionName);
+                                                } else {
+                                                    console.log("No animations found or default animation could not be played.");
+                                                }
+                                            } else {
+                                                console.log(_this.selectedCharacter, " model has no embedded animations.");
+                                            }
+                                            // Scale and position character based on model
+                                            var scale;
+                                            if (_this.selectedCharacter === 'bumblebee') {
+                                                scale = 6000; // Bumblebee is a Transformer - bigger than Red
+                                            } else if (_this.selectedCharacter === 'red') {
+                                                scale = 80; // Red is an Angry Bird - smaller
+                                            } else {
+                                                scale = 80; // Default scale
+                                            }
+                                            _this.pandaModel.scale.set(scale, scale, scale);
+                                            var sceneHeight = _this.renderDiv.clientHeight;
+                                            _this.pandaModel.position.set(0, sceneHeight * -0.45, -1000);
+                                            _this.pandaModel.userData.modelName = _this.selectedCharacter;
+                                            _this.scene.add(_this.pandaModel);
+                                            _this.loadedModels.push(_this.pandaModel);
+                                            console.log(_this.selectedCharacter, " GLTF model loaded and added to scene with scale:", scale);
+                                            resolve();
+                                        }, undefined, function(error) {
+                                            console.error('An error occurred while loading the ', _this.selectedCharacter, ' GLTF model:', error);
+                                            reject(error);
+                                        });
+                                    })
                                 ];
                             case 2:
                                 _state.sent();
                                 console.log("All specified assets loaded.");
-                                // Set the active model to the first one (Stan by default)
+                                // Set the active model to the loaded character
                                 if (_this.loadedModels.length > 0) {
                                     _this.pandaModel = _this.loadedModels[_this.activeModelIndex];
                                     console.log("Active model set to: ".concat(_this.pandaModel.userData.modelName || 'Unknown'));

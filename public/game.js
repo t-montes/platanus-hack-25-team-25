@@ -219,6 +219,8 @@ export var Game = /*#__PURE__*/ function() {
         this.speechBubble = null;
         this.speechBubbleTimeout = null;
         this.isSpeechActive = false; // Track if speech recognition is active for styling
+        this.backendUrl = 'http://localhost:3000'; // Backend URL
+        this.conversationId = 'default'; // Conversation ID for backend
         this.grabbingHandIndex = -1; // -1: no hand, 0: first hand, 1: second hand grabbing
         this.pickedUpModel = null; // Reference to the model being dragged
         this.modelDragOffset = new THREE.Vector3(); // Offset between model and pinch point in 3D
@@ -1517,6 +1519,8 @@ export var Game = /*#__PURE__*/ function() {
                         if (finalTranscript) {
                             _this.speechBubble.innerHTML = finalTranscript;
                             _this.speechBubble.style.opacity = '1';
+                            // Send transcript to backend and play audio response
+                            _this._sendToBackendAndPlay(finalTranscript);
                             _this.speechBubbleTimeout = setTimeout(function() {
                                 _this.speechBubble.innerHTML = "...";
                                 _this.speechBubble.style.opacity = '0.7';
@@ -1560,6 +1564,38 @@ export var Game = /*#__PURE__*/ function() {
                     this._updateSpeechBubbleAppearance(); // Apply initial styles (isSpeechActive will be false)
                 }
             // We will call requestPermissionAndStart() on user interaction (e.g., start button)
+            }
+        },
+        {
+            key: "_sendToBackendAndPlay",
+            value: function _sendToBackendAndPlay(text) {
+                var _this = this;
+                if (!text || !text.trim()) return;
+                fetch("".concat(this.backendUrl, "/speak"), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        conversationId: this.conversationId
+                    })
+                }).then(function(response) {
+                    if (!response.ok) {
+                        throw new Error("Backend error: ".concat(response.status));
+                    }
+                    return response.json();
+                }).then(function(data) {
+                    if (data.audioB64) {
+                        // Convert base64 to audio and play immediately
+                        var audio = new Audio("data:".concat(data.audioMime || "audio/mpeg", ";base64,").concat(data.audioB64));
+                        audio.play().catch(function(err) {
+                            console.error("Error playing audio:", err);
+                        });
+                    }
+                }).catch(function(error) {
+                    console.error("Error sending to backend:", error);
+                });
             }
         },
         {

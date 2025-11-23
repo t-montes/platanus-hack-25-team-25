@@ -302,8 +302,8 @@ export var Game = /*#__PURE__*/ function() {
         this.unpinchStabilityFrames = [0, 0]; // Counter for stable unpinch frames per hand
         this.unpinchStabilityThreshold = 3; // Frames needed to confirm unpinch (prevents accidental release)
         this.confirmedPinchState = [false, false]; // Stable pinch state per hand
-        this.maxPickDistance = 250; // Maximum distance in pixels to pick an object
-        this.boundingBoxPadding = 50; // Padding around bounding boxes to make grabbing easier
+        this.maxPickDistance = 600; // Maximum distance in pixels to pick an object (very generous)
+        this.boundingBoxPadding = 80; // Padding around bounding boxes to make grabbing easier
         // Onboarding system
         this.onboardingHands = null;
         this.onboardingCompleted = false;
@@ -1058,7 +1058,6 @@ export var Game = /*#__PURE__*/ function() {
                                             _this1.pinchStabilityFrames[i]++;
                                             if (_this1.pinchStabilityFrames[i] >= pinchFramesNeeded) {
                                                 _this1.confirmedPinchState[i] = true;
-                                                console.log("Hand ".concat(i, " pinch CONFIRMED"));
                                             }
                                         }
                                         _this1.unpinchStabilityFrames[i] = 0;
@@ -1067,7 +1066,6 @@ export var Game = /*#__PURE__*/ function() {
                                             _this1.unpinchStabilityFrames[i]++;
                                             if (_this1.unpinchStabilityFrames[i] >= unpinchFramesNeeded) {
                                                 _this1.confirmedPinchState[i] = false;
-                                                console.log("Hand ".concat(i, " unpinch CONFIRMED"));
                                             }
                                         }
                                         _this1.pinchStabilityFrames[i] = 0;
@@ -1195,8 +1193,6 @@ export var Game = /*#__PURE__*/ function() {
                                                 _this1.modelDragOffset.copy(_this1.handModelDragOffsets[i]);
                                                 _this1.modelGrabStartDepth = _this1.handModelGrabStartDepths[i];
                                                 console.log("Hand ".concat(i, " GRABBED model for DRAG at depth ").concat(_this1.handModelGrabStartDepths[i]));
-                                            } else {
-                                                console.log("Hand ".concat(i, " pinch detected but NO model within range for DRAG"));
                                             }
                                         } else if (_this1.handGrabbedModels[i]) {
                                             var grabbedModel = _this1.handGrabbedModels[i];
@@ -1235,8 +1231,6 @@ export var Game = /*#__PURE__*/ function() {
                                                 _this1.handRotateLastX[i] = hand.pinchPointScreen.x;
                                                 _this1.rotateLastHandX = _this1.handRotateLastX[i];
                                                 console.log("Hand ".concat(i, " INITIATED ROTATION on model via pinch."));
-                                            } else {
-                                                console.log("Hand ".concat(i, " pinch detected but NO model within range for ROTATE"));
                                             }
                                         } else if (_this1.handGrabbedModels[i] && _this1.handRotateLastX[i] !== null) {
                                             var grabbedModel = _this1.handGrabbedModels[i];
@@ -1276,8 +1270,6 @@ export var Game = /*#__PURE__*/ function() {
                                                 _this1.grabbingHandIndex = 0; // Mark as "grabbing" for scaling (using hand 0 as primary)
                                                 _this1.pickedUpModel = pickedModel; // Indicate model is being interacted with
                                                 console.log("SCALE initiated. Initial pinch dist: ".concat(dist.toFixed(2), ", Initial scale: ").concat(_this1.scaleInitialModelScale.x.toFixed(2)));
-                                            } else {
-                                                console.log('Both hands pinching but NO model within range for SCALE');
                                             }
                                         } else {
                                             // Continue scaling
@@ -1480,12 +1472,9 @@ export var Game = /*#__PURE__*/ function() {
                 modelsWithDistances.sort(function(a, b) {
                     return a.adjustedDistance - b.adjustedDistance;
                 });
-                // Check if the closest model is within acceptable range
-                var closestEntry = modelsWithDistances[0];
-                if (closestEntry.distance > this.maxPickDistance) {
-                    return null;
-                }
-                return closestEntry.model;
+                // Always return the closest model - no distance limit
+                // The hand preference and distance multipliers already ensure proper selection
+                return modelsWithDistances[0].model;
             }
         },
         {
@@ -1535,10 +1524,7 @@ export var Game = /*#__PURE__*/ function() {
                         closestModel = model;
                     }
                 }
-                // Check if the closest model is within acceptable range (more lenient for two-hand scaling)
-                if (minAvgDistance > this.maxPickDistance * 1.5) {
-                    return null;
-                }
+                // Always return the closest model for scale mode - no distance limit
                 return closestModel;
             }
         },

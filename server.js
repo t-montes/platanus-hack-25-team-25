@@ -71,11 +71,14 @@ Response: {"text": "¡Un plátano delicioso! ¿Para quién es?", "command": "pla
 User: "astronauta"
 Response: {"text": "¡Un astronauta espacial! ¿Listo para explorar?", "command": "astronaut"}
 
+User: "bodoque"
+Response: {"text": "¡Un bodoque! Aquí está. ¿Qué quieres hacer con él?", "command": "bodoque"}
+
 User: "hola"
 Response: {"text": "¡Hola! ¿Qué quieres crear hoy?"}
 
 User: "¿qué puedo hacer?"
-Response: {"text": "¡Puedes agregar un dragón, mono, plátano o astronauta! ¿Cuál quieres?"}
+Response: {"text": "¡Puedes agregar un dragón, mono, plátano, astronauta o bodoque! ¿Cuál quieres?"}
 
 ---
 
@@ -92,6 +95,7 @@ AVAILABLE OBJECTS:
 - MONO: When user mentions "mono" or "monkey", include "command": "monkey"  
 - PLÁTANO: When user mentions "plátano" or "platano" or "banana", include "command": "platano"
 - ASTRONAUTA: When user mentions "astronauta" or "astronaut", include "command": "astronaut"
+- BODOQUE: When user mentions "bodoque", include "command": "bodoque"
 
 GUIDELINES:
 - Keep responses SHORT (max 1-2 sentences, under 100 words)
@@ -155,7 +159,7 @@ app.post("/speak", async (req, res) => {
       parts: [{ text: userMessage }]
     });
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
     const geminiPayload = {
       contents: chatHistory,
       systemInstruction: {
@@ -249,8 +253,14 @@ app.post("/speak", async (req, res) => {
     }
     
     if (!replyText || replyText.trim().length === 0) {
-      console.error('Empty reply text, using fallback');
-      replyText = '¡Estoy aquí para ayudar! ¿Qué te gustaría explorar?';
+      console.error('Empty reply text, returning early without TTS');
+      const response = {
+        replyText: ''
+      };
+      if (command) {
+        response.command = command;
+      }
+      return res.json(response);
     }
 
     if (!command) {
@@ -261,7 +271,8 @@ app.post("/speak", async (req, res) => {
         { keywords: ['dragón', 'dragon'], contextNames: ['dragón', 'dragon'], command: 'dragon' },
         { keywords: ['mono', 'monkey'], contextNames: ['mono', 'monkey'], command: 'monkey' },
         { keywords: ['plátano', 'platano', 'banana'], contextNames: ['plátano', 'platano'], command: 'platano' },
-        { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' }
+        { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' },
+        { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' }
       ];
       
       for (const check of objectChecks) {

@@ -222,6 +222,7 @@ export var Game = /*#__PURE__*/ function() {
         this.monkeyModel = null; // Add reference for the Monkey model
         this.platanoModel = null; // Add reference for the Platano model
         this.astronautModel = null; // Add reference for the Astronaut model
+        this.bodoqueModel = null; // Add reference for the Bodoque model
         this.interactiveModels = []; // Array to track all interactive models in the scene
         this.animationMixer = null; // For model animations
         this.animationClips = []; // To store all animation clips from the model
@@ -1218,8 +1219,10 @@ export var Game = /*#__PURE__*/ function() {
                                             var scaleFactorChange = deltaDistance * _this1.scaleSensitivity;
                                             var newScaleValue = _this1.scaleInitialModelScale.x + scaleFactorChange;
                                             // Clamp scale to prevent extreme sizes or inversion
-                                            var minScale = 10; // Example min scale (adjust based on model's base size)
-                                            var maxScale = 300; // Example max scale
+                                            // Use relative limits based on initial scale to work with all models
+                                            var initialScale = _this1.scaleInitialModelScale.x;
+                                            var minScale = Math.max(1, initialScale * 0.1); // At least 10% of initial scale, minimum 1
+                                            var maxScale = initialScale * 5.0; // Up to 500% of initial scale
                                             newScaleValue = Math.max(minScale, Math.min(maxScale, newScaleValue));
                                             if (_this1.pickedUpModel) {
                                                 _this1.pickedUpModel.scale.set(newScaleValue, newScaleValue, newScaleValue);
@@ -1895,6 +1898,9 @@ export var Game = /*#__PURE__*/ function() {
                 if (this.astronautModel && this.scene && this.scene.children.includes(this.astronautModel)) {
                     sceneObjects.push('astronauta');
                 }
+                if (this.bodoqueModel && this.scene && this.scene.children.includes(this.bodoqueModel)) {
+                    sceneObjects.push('bodoque');
+                }
                 
                 var sceneContext = {
                     character: this.selectedCharacter,
@@ -1963,6 +1969,9 @@ export var Game = /*#__PURE__*/ function() {
                         break;
                     case 'astronaut':
                         this._createAstronaut();
+                        break;
+                    case 'bodoque':
+                        this._createBodoque();
                         break;
                     default:
                         console.warn('Unknown intent command:', command);
@@ -2553,6 +2562,53 @@ export var Game = /*#__PURE__*/ function() {
                     }
                 }, undefined, function(error) {
                     console.error('Error loading astronaut model:', error);
+                });
+            }
+        },
+        {
+            key: "_createBodoque",
+            value: function _createBodoque() {
+                var _this = this;
+                if (this.bodoqueModel && this.scene && this.scene.children.includes(this.bodoqueModel)) {
+                    console.log('Bodoque already exists in scene');
+                    return;
+                }
+                console.log('Loading bodoque model...');
+                var gltfLoader = new GLTFLoader();
+                gltfLoader.load('assets/scene.gltf', function(gltf) {
+                    _this.bodoqueModel = gltf.scene;
+                    var box = new THREE.Box3().setFromObject(_this.bodoqueModel);
+                    var size = box.getSize(new THREE.Vector3());
+                    var center = box.getCenter(new THREE.Vector3());
+                    var scale = 150 / Math.max(size.x, size.y, size.z);
+                    _this.bodoqueModel.scale.set(0.01, 0.01, 0.01);
+                    _this.bodoqueModel.position.set(
+                        -center.x * scale,
+                        -center.y * scale,
+                        -800
+                    );
+                    if (_this.scene) {
+                        _this.scene.add(_this.bodoqueModel);
+                        _this.interactiveModels.push(_this.bodoqueModel);
+                        console.log('Bodoque model loaded and added to scene at position:', _this.bodoqueModel.position);
+                        var startTime = Date.now();
+                        var duration = 1000;
+                        var targetScale = scale;
+                        var animateBodoqueEntrance = function() {
+                            var elapsed = Date.now() - startTime;
+                            var progress = Math.min(elapsed / duration, 1);
+                            var easeProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                            var currentScale = 0.01 + (targetScale - 0.01) * easeProgress;
+                            _this.bodoqueModel.scale.set(currentScale, currentScale, currentScale);
+                            _this.bodoqueModel.rotation.y = easeProgress * Math.PI * 2;
+                            if (progress < 1) {
+                                requestAnimationFrame(animateBodoqueEntrance);
+                            }
+                        };
+                        animateBodoqueEntrance();
+                    }
+                }, undefined, function(error) {
+                    console.error('Error loading bodoque model:', error);
                 });
             }
         }

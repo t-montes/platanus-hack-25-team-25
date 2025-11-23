@@ -233,7 +233,7 @@ export var Game = /*#__PURE__*/ function() {
         this.onboardingText = null; // Text element for onboarding instructions
         this.isSpeechActive = false; // Track if speech recognition is active for styling
         this.isPlayingAudio = false; // Track if audio is currently playing (for bubble animation)
-        this.backendUrl = 'http://localhost:3000'; // Backend URL
+        this.backendUrl = window.location.origin; // Backend URL - uses current host (works in local and prod)
         // Clear any previous session on page load/refresh
         this._clearPreviousSession();
         this.conversationId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
+import { SpeechClient } from "@google-cloud/speech";
 
 dotenv.config();
 
@@ -12,7 +13,18 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY || process.env.ELEVENLABS_API_KEY;
 const ELEVEN_VOICE_ID = process.env.ELEVEN_VOICE_ID || process.env.ELEVENLABS_VOICE_ID;
 
-app.use(express.json());
+const speechClient = new SpeechClient();
+
+// Using gemini-flash-latest (gemini-2.5-flash) as required
+// Note: This model uses ~149 thinking tokens, so we need higher maxOutputTokens
+const GEMINI_MODEL = "gemini-flash-latest";
+
+console.log('🚀 Server starting...');
+console.log('✅ Using Gemini model:', GEMINI_MODEL);
+console.log('   (Note: This model uses thinking tokens, so maxOutputTokens is set higher)');
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static("public"));
 app.use(cors());
 
@@ -50,74 +62,367 @@ function cleanupOldSessions() {
 
 setInterval(cleanupOldSessions, 5 * 60 * 1000);
 
-const SYSTEM_PROMPT = `CRITICAL INSTRUCTION - JSON FORMAT REQUIRED - SPANISH ONLY:
-You MUST respond ONLY with valid JSON. Never respond with plain text.
-You MUST respond ONLY in SPANISH. Never use English.
-Every response must use this exact format:
-{"text": "tu respuesta en español", "command": "comando_si_se_necesita"}
+app.post("/process", async (req, res) => {
+  try {
+    const { audioContentB64, languageCode = "es-ES", sceneContext, conversationId, audioFormat = "webm" } = req.body || {};
+    console.log('=== /process endpoint called ===');
+    console.log('Conversation ID:', conversationId);
+    console.log('Audio length:', audioContentB64?.length || 0);
+    console.log('Audio format:', audioFormat);
+    console.log('Scene context:', JSON.stringify(sceneContext, null, 2));
 
-If no command is needed, omit the command field:
-{"text": "tu respuesta en español"}
+    if (!audioContentB64) {
+      return res.status(400).json({ error: "Missing audioContentB64" });
+    }
 
-LANGUAGE REQUIREMENT: ALL text in the "text" field MUST be in SPANISH. Never respond in English.
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Gemini API not configured" });
+    }
 
-EXAMPLES:
-User: "dragón" or "quiero un dragón"
-Response: {"text": "¡Genial! Te traigo un dragón. ¿Quieres aprender a moverlo?", "command": "dragon"}
+    if (!ELEVEN_API_KEY || !ELEVEN_VOICE_ID) {
+      return res.status(500).json({ error: "ElevenLabs API not configured" });
+    }
 
-User: "mono" or "quiero un mono"
-Response: {"text": "¡Un mono! Aquí está. ¿Qué va a hacer?", "command": "monkey"}
+    // 1) GCP Speech-to-Text - Try multiple encodings
+    console.log('Starting STT transcription...');
+    console.log('Audio size (base64):', audioContentB64.length, 'bytes');
+    const sttStartTime = Date.now();
+    
+    const encodings = ["WEBM_OPUS", "OGG_OPUS", "MP3"];
+    let sttResp = null;
+    let usedEncoding = null;
+    
+    for (const encoding of encodings) {
+      try {
+        console.log(`Trying encoding: ${encoding}`);
+        [sttResp] = await speechClient.recognize({
+          config: {
+            encoding: encoding,
+            languageCode: languageCode,
+            enableAutomaticPunctuation: true,
+            model: "latest_short"
+          },
+          audio: { content: audioContentB64 }
+        });
+        
+        if (sttResp.results && sttResp.results.length > 0) {
+          usedEncoding = encoding;
+          console.log(`Success with encoding: ${encoding}`);
+          break;
+        }
+      } catch (error) {
+        console.log(`Failed with ${encoding}:`, error.message);
+      }
+    }
 
-User: "plátano" or "pon un plátano"
-Response: {"text": "¡Un plátano delicioso! ¿Para quién es?", "command": "platano"}
+    if (!sttResp || !sttResp.results || sttResp.results.length === 0) {
+      console.error('❌ STT FAILED - No speech detected in audio');
+      console.error('This means:');
+      console.error('  1. Audio is too quiet/silent');
+      console.error('  2. Audio format is corrupted/invalid');
+      console.error('  3. Audio duration too short');
+      console.error('  4. No actual speech in the recording');
+      
+      return res.status(400).json({
+        error: "No speech detected in audio. Please speak louder and hold SPACE longer.",
+        conversationId,
+        transcript: ""
+      });
+    }
 
-User: "astronauta"
-Response: {"text": "¡Un astronauta espacial! ¿Listo para explorar?", "command": "astronaut"}
+    console.log('STT raw response:', JSON.stringify(sttResp, null, 2));
 
-User: "bodoque"
-Response: {"text": "¡Un bodoque! Aquí está. ¿Qué quieres hacer con él?", "command": "bodoque"}
+    const transcript = (sttResp.results || [])
+      .map(r => r.alternatives?.[0]?.transcript || "")
+      .join(" ")
+      .trim();
+    
+    const sttDuration = Date.now() - sttStartTime;
+    console.log('STT completed in', sttDuration, 'ms');
+    console.log('Used encoding:', usedEncoding);
+    console.log('Transcript:', transcript);
+    console.log('Number of results:', sttResp.results?.length || 0);
 
-User: "tulio"
-Response: {"text": "¡Tulio! Aquí está. ¿Qué quieres hacer con él?", "command": "tulio"}
+    if (!transcript) {
+      return res.json({
+        conversationId,
+        transcript: "",
+        replyText: "No pude escucharte bien. ¿Puedes repetir?",
+        audioB64: null,
+        audioMime: "audio/mpeg"
+      });
+    }
+
+    // 2) Build context message
+    let userMessage = transcript;
+    if (sceneContext) {
+      const contextInfo = [];
+      if (sceneContext.character) {
+        contextInfo.push(`Personaje actual: ${sceneContext.character}`);
+      }
+      if (sceneContext.background) {
+        contextInfo.push(`Fondo actual: ${sceneContext.background}`);
+      }
+      if (sceneContext.objects && sceneContext.objects.length > 0) {
+        contextInfo.push(`Objetos en escena: ${sceneContext.objects.join(', ')}`);
+      } else {
+        contextInfo.push(`Objetos en escena: ninguno`);
+      }
+      
+      userMessage = `[CONTEXTO: ${contextInfo.join(' | ')}]\n\nUsuario dice: ${transcript}`;
+    }
+
+    console.log('Message to Gemini:', userMessage);
+
+    // 3) Get or create chat history
+    const chatHistory = getOrCreateChatHistory(conversationId);
+    chatHistory.push({
+      role: "user",
+      parts: [{ text: userMessage }]
+    });
+
+    // 4) Call Gemini
+    console.log('Starting Gemini call...');
+    const geminiStartTime = Date.now();
+    
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiPayload = {
+      contents: chatHistory,
+      systemInstruction: {
+        parts: [{ text: SYSTEM_PROMPT }]
+      },
+      generationConfig: {
+        temperature: 0.8,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 1000,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              description: "The response text in Spanish - MUST be in Spanish, never English"
+            },
+            command: {
+              type: "string",
+              description: "Optional command to execute (dragon, monkey, platano, astronaut, bodoque, tulio)",
+              nullable: true
+            }
+          },
+          required: ["text"]
+        }
+      }
+    };
+
+    const geminiResp = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(geminiPayload)
+    });
+
+    if (!geminiResp.ok) {
+      const errTxt = await geminiResp.text().catch(() => "");
+      throw new Error(`Gemini API failed: ${geminiResp.status} ${errTxt}`);
+    }
+
+    const geminiData = await geminiResp.json();
+    const geminiDuration = Date.now() - geminiStartTime;
+    console.log('Gemini completed in', geminiDuration, 'ms');
+    console.log('Gemini raw data:', JSON.stringify(geminiData, null, 2));
+
+    if (!geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.error('❌ GEMINI FAILED - Invalid response structure');
+      console.error('Finish reason:', geminiData?.candidates?.[0]?.finishReason);
+      console.error('Full response:', JSON.stringify(geminiData, null, 2));
+      
+      throw new Error(`Gemini returned invalid response. Finish reason: ${geminiData?.candidates?.[0]?.finishReason || 'unknown'}. This usually means the model is using thinking tokens or hitting MAX_TOKENS.`);
+    }
+
+    let rawReply = geminiData.candidates[0].content.parts[0].text;
+    console.log('✅ Gemini raw reply:', rawReply);
+    let replyText = null;
+    let llmCommand = null;
+
+    try {
+      let jsonToParse = rawReply.trim();
+      
+      if (!jsonToParse.startsWith('{')) {
+        const jsonMatch = rawReply.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonToParse = jsonMatch[0];
+        } else {
+          replyText = rawReply;
+          throw new Error('No JSON found');
+        }
+      }
+      
+      const parsed = JSON.parse(jsonToParse);
+      
+      if (parsed.text) {
+        replyText = parsed.text;
+        llmCommand = parsed.command || null;
+      } else {
+        replyText = rawReply;
+      }
+    } catch (e) {
+      if (!replyText) {
+        replyText = rawReply;
+      }
+    }
+
+    if (!replyText || replyText.trim().length === 0) {
+      const response = {
+        conversationId,
+        transcript,
+        replyText: '',
+        audioB64: null,
+        audioMime: "audio/mpeg"
+      };
+      return res.json(response);
+    }
+
+    // Keyword-based command detection (PRIORITY: keywords override LLM interpretation)
+    const transcriptLower = transcript.toLowerCase();
+    const contextStr = JSON.stringify(sceneContext).toLowerCase();
+    let command = null;
+    
+    // First check for background/environment commands (highest priority)
+    const backgroundCommands = [
+      { keywords: ['espacio', 'space', 'espacial', 'cosmos', 'ir al espacio', 'irme para el espacio', 'quiero irme para el espacio'], command: 'space' }
+    ];
+    
+    for (const check of backgroundCommands) {
+      if (check.keywords.some(kw => transcriptLower.includes(kw))) {
+        console.log(`✅ KEYWORD MATCH: "${transcript}" → command: ${check.command} (background)`);
+        command = check.command;
+        break;
+      }
+    }
+    
+    // Then check for object creation commands (only if no background command found)
+    if (!command) {
+      const objectChecks = [
+        { keywords: ['dragón', 'dragon'], contextNames: ['dragón', 'dragon'], command: 'dragon' },
+        { keywords: ['mono', 'monkey'], contextNames: ['mono', 'monkey'], command: 'monkey' },
+        { keywords: ['plátano', 'platano', 'banana'], contextNames: ['plátano', 'platano'], command: 'platano' },
+        { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' },
+        { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' },
+        { keywords: ['tulio'], contextNames: ['tulio'], command: 'tulio' }
+      ];
+      
+      for (const check of objectChecks) {
+        const userMentioned = check.keywords.some(kw => transcriptLower.includes(kw));
+        const inScene = check.contextNames.some(name => contextStr.includes(name));
+        
+        if (userMentioned && !inScene) {
+          console.log(`✅ KEYWORD MATCH: "${transcript}" → command: ${check.command} (object)`);
+          command = check.command;
+          break;
+        }
+      }
+    }
+    
+    // Use keyword match if found, otherwise use LLM command
+    if (!command && llmCommand) {
+      command = llmCommand;
+      console.log(`📝 Using LLM command: ${command}`);
+    } else if (command && llmCommand && command !== llmCommand) {
+      console.log(`⚠️  Overriding LLM command "${llmCommand}" with keyword match "${command}"`);
+    }
+
+    // 5) Update chat history
+    chatHistory.push({
+      role: "model",
+      parts: [{ text: replyText }]
+    });
+
+    if (chatHistory.length > MAX_TURNS * 2) {
+      const trimmed = chatHistory.slice(-MAX_TURNS * 2);
+      chatHistory.length = 0;
+      chatHistory.push(...trimmed);
+    }
+
+    // 6) ElevenLabs TTS
+    console.log('Starting TTS...');
+    const ttsStartTime = Date.now();
+    
+    const textForTTS = replyText.trim();
+    const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}`;
+    const ttsResp = await fetch(ttsUrl, {
+      method: "POST",
+      headers: { 
+        "xi-api-key": ELEVEN_API_KEY, 
+        "Content-Type": "application/json", 
+        Accept: "audio/mpeg" 
+      },
+      body: JSON.stringify({
+        text: textForTTS,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.4, similarity_boost: 0.8, speed: 1.15 }
+      })
+    });
+
+    if (!ttsResp.ok) {
+      const errTxt = await ttsResp.text().catch(() => "");
+      throw new Error(`ElevenLabs TTS failed: ${ttsResp.status} ${errTxt}`);
+    }
+
+    const audioBuffer = Buffer.from(await ttsResp.arrayBuffer());
+    const audioB64 = audioBuffer.toString("base64");
+    
+    const ttsDuration = Date.now() - ttsStartTime;
+    console.log('TTS completed in', ttsDuration, 'ms');
+    console.log('Total pipeline duration:', sttDuration + geminiDuration + ttsDuration, 'ms');
+
+    const response = {
+      conversationId,
+      transcript,
+      replyText,
+      audioB64,
+      audioMime: "audio/mpeg"
+    };
+
+    if (command) {
+      response.command = command;
+    }
+
+    console.log('Response:', {
+      hasAudio: !!response.audioB64,
+      transcript: response.transcript,
+      replyText: response.replyText,
+      command: response.command
+    });
+    console.log('=== End of /process request ===\n');
+
+    return res.json(response);
+  } catch (e) {
+    console.error("Process error:", e);
+    return res.status(500).json({ error: e.message || "Internal error" });
+  }
+});
+
+const SYSTEM_PROMPT = `Eres un asistente amigable para niños en español. Responde SOLO en JSON.
+
+IMPORTANTE: NO crees objetos automáticamente. Solo responde conversacionalmente.
+Los comandos se detectan automáticamente por palabras clave, NO necesitas incluirlos.
+
+Ejemplos:
+User: "quiero un plátano"
+{"text": "¡Genial! Te traigo un plátano. ¿Qué quieres hacer con él?"}
+
+User: "quiero irme para el espacio"
+{"text": "¡El espacio es increíble! Vamos a explorar las estrellas."}
 
 User: "hola"
-Response: {"text": "¡Hola! ¿Qué quieres crear hoy?"}
+{"text": "¡Hola! ¿Qué quieres crear hoy?"}
 
-User: "¿qué puedo hacer?"
-Response: {"text": "¡Puedes agregar algunos personajes, como tulio de 31 minutos! O puedes cambiar de entorno, ¿qué te gustaría hacer?"}
-
----
-
-ROLE: Eres un maestro amigable y entusiasta ayudando a un niño a explorar una plataforma de mundo virtual creativo.
-
-PLATFORM FEATURES:
-- ARRASTRAR: Di "arrastrar" para mover objetos con una mano
-- ROTAR: Di "rotar" para girar objetos con una mano
-- ESCALAR: Di "escalar" para hacer más grande o pequeño con ambas manos
-- ANIMACIÓN: Di "animación" para ver animaciones
-
-AVAILABLE OBJECTS:
-- DRAGÓN: When user mentions "dragón" or "dragon", include "command": "dragon"
-- MONO: When user mentions "mono" or "monkey", include "command": "monkey"  
-- PLÁTANO: When user mentions "plátano" or "platano" or "banana", include "command": "platano"
-- ASTRONAUTA: When user mentions "astronauta" or "astronaut", include "command": "astronaut"
-- BODOQUE: When user mentions "bodoque", include "command": "bodoque"
-- TULIO: When user mentions "tulio", include "command": "tulio"
-
-GUIDELINES:
-- Keep responses SHORT (max 1-2 sentences, under 100 words)
-- Be energetic and encouraging
-- Use simple language for kids
-- ALWAYS respond in SPANISH (inside the JSON "text" field) - NEVER in English
-- DO NOT repeat context info unless asked
-- If user asks for unavailable items, suggest the dragon
-- End with engaging follow-up question
-
-REMEMBER: 
-- EVERY response must be valid JSON with "text" field in SPANISH ONLY
-- NEVER respond in English
-- The "text" field MUST contain Spanish text, never English
-- Optionally include "command" field if needed`;
+REGLAS:
+- Responde en español, máximo 2 oraciones cortas
+- Sé entusiasta y simple
+- NO incluyas "command" en tu respuesta (se detecta automáticamente)
+- Solo responde conversacionalmente
+- Siempre formato JSON válido con solo el campo "text"`;
 
 
 // /speak: text -> Gemini -> TTS -> return audio
@@ -170,7 +475,7 @@ app.post("/speak", async (req, res) => {
       parts: [{ text: userMessage }]
     });
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     const geminiPayload = {
       contents: chatHistory,
       systemInstruction: {

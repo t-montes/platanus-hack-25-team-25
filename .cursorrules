@@ -2,3 +2,5 @@ The main implementation is currently in /public where we have the HTML, JS, CSS 
 
 Do not overcomment, ONLY add comments when they are strictly necessary to understand the code.
 Same with the logs, only keep the essential; if you're logging to debug, make sure to remove them when done debugging.
+
+DO NOT CHANGE THE GEMINI MODEL; ALWAYS USE, FOR EVERYTHING gemini-flash-latest; DO NOT use gemini-1.5-flash, no!! that's completely wrong.

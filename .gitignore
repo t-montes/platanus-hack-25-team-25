@@ -4,4 +4,4 @@ node_modules
 sample
 
 .env
-backend/service-account.json
+service-account.json

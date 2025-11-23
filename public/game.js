@@ -172,9 +172,9 @@ function _ts_generator(thisArg, body) {
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/loaders/GLTFLoader.js';
 import { HandLandmarker, FilesetResolver } from 'https://esm.sh/@mediapipe/tasks-vision@0.10.14';
-import { AudioManager } from './audioManager.js'; // Import the AudioManager
-import { SpeechManager } from './SpeechManager.js'; // Import SpeechManager
-import { OnboardingHands } from './OnboardingHands.js'; // Import OnboardingHands
+import { AudioManager } from './audioManager.js';
+import { PushToTalkManager } from './PushToTalkManager.js';
+import { OnboardingHands } from './OnboardingHands.js';
 
 export var Game = /*#__PURE__*/ function() {
     "use strict";
@@ -225,9 +225,9 @@ export var Game = /*#__PURE__*/ function() {
         this.interactiveModels = []; // Array to track all interactive models in the scene
         this.animationMixer = null; // For model animations
         this.animationClips = []; // To store all animation clips from the model
-        this.animationActions = {}; // To store animation actions by name or index
-        this.currentAction = null; // To keep track of the currently playing animation action
-        this.speechManager = null;
+        this.animationActions = {};
+        this.currentAction = null;
+        this.pushToTalkManager = null;
         this.speechBubble = null;
         this.speechBubbleTimeout = null;
         this.onboardingText = null; // Text element for onboarding instructions
@@ -309,9 +309,9 @@ export var Game = /*#__PURE__*/ function() {
                     return _ts_generator(this, function(_state) {
                         switch(_state.label){
                             case 0:
-                                _this._setupDOM(); // Sets up basic DOM, including speech bubble container
+                                _this._setupDOM();
                                 _this._setupThree();
-                                _this._setupSpeechRecognition(); // Initialize SpeechManager
+                                _this._setupPushToTalk();
                                 return [
                                     4,
                                     _this._loadAssets()
@@ -331,9 +331,9 @@ export var Game = /*#__PURE__*/ function() {
                                 ];
                             case 3:
                                 _state.sent();
-                                _this.audioManager.resumeContext(); // Resume audio context as game starts automatically
-                                _this.speechManager.requestPermissionAndStart(); // Start speech recognition
-                                _this.clock.start(); // Start the main clock as game starts automatically
+                                _this.audioManager.resumeContext();
+                                _this._initializePushToTalk();
+                                _this.clock.start();
                                 window.addEventListener('resize', _this._onResize.bind(_this));
                                 _this.gameState = 'tracking';
                                 _this._animate();
@@ -1882,64 +1882,154 @@ export var Game = /*#__PURE__*/ function() {
             }
         },
         {
-            key: "_setupSpeechRecognition",
-            value: function _setupSpeechRecognition() {
+            key: "_setupPushToTalk",
+            value: function _setupPushToTalk() {
                 var _this = this;
-                this.speechManager = new SpeechManager(function(finalTranscript, interimTranscript) {
-                    if (_this.speechBubble) {
-                        clearTimeout(_this.speechBubbleTimeout);
-                        if (finalTranscript) {
-                            _this.speechBubble.innerHTML = finalTranscript;
-                            _this.speechBubble.style.opacity = '1';
-                            _this._sendToBackendAndPlay(finalTranscript);
-                            _this.speechBubbleTimeout = setTimeout(function() {
-                                _this.speechBubble.innerHTML = "...";
-                                _this.speechBubble.style.opacity = '0.7';
-                                _this._updateSpeechBubbleAppearance(); // Update appearance for "..."
-                            }, 2000);
-                        } else if (interimTranscript) {
-                            _this.speechBubble.innerHTML = '<i style="color: #888;">'.concat(interimTranscript, "</i>");
-                            _this.speechBubble.style.opacity = '1';
-                        } else {
-                            _this.speechBubbleTimeout = setTimeout(function() {
-                                if (_this.speechBubble.innerHTML !== "...") {
-                                    _this.speechBubble.innerHTML = "...";
-                                }
-                                _this.speechBubble.style.opacity = '0.7';
-                                _this._updateSpeechBubbleAppearance(); // Update appearance for "..."
-                            }, 500);
-                        }
-                        _this._updateSpeechBubbleAppearance();
+                
+                this.micStatusElement = document.getElementById('mic-status');
+                this.micStatusText = document.getElementById('mic-status-text');
+                
+                window.gameSceneContext = {
+                    character: this.selectedCharacter,
+                    background: this.selectedBackground,
+                    objects: []
+                };
+                
+                this.pushToTalkManager = new PushToTalkManager(
+                    this.backendUrl,
+                    this.conversationId,
+                    function(state) {
+                        _this._onPTTStateChange(state);
+                    },
+                    function(transcript) {
+                        _this._onTranscript(transcript);
+                    },
+                    function(response) {
+                        _this._onPTTResponse(response);
                     }
-                }, function(isActive) {
-                    _this.isSpeechActive = isActive;
-                    _this._updateSpeechBubbleAppearance();
-                }, function(command) {
-                    var validCommands = [
-                        'drag',
-                        'rotate',
-                        'scale',
-                        'animate'
-                    ];
-                    if (validCommands.includes(command.toLowerCase())) {
-                        _this._setInteractionMode(command.toLowerCase());
-                    } else if (command.toLowerCase() === 'greet') {
-                        _this._playAnimation('TensionFrontWave', true);
-                    } else if (command.toLowerCase() === 'platano') {
-                        _this._createPlatano();
-                    } else if (command.toLowerCase() === 'astronaut') {
-                        _this._createAstronaut();
-                    } else if (command.toLowerCase() === 'space') {
-                        _this._changeBackgroundToSpace();
-                    }
-                });
-                // Initialize speech bubble with "..." and apply initial appearance
+                );
+                
                 if (this.speechBubble) {
                     this.speechBubble.innerHTML = "...";
                     this.speechBubble.style.opacity = '0.7';
-                    this._updateSpeechBubbleAppearance(); // Apply initial styles (isSpeechActive will be false)
+                    this._updateSpeechBubbleAppearance();
                 }
-            // We will call requestPermissionAndStart() on user interaction (e.g., start button)
+            }
+        },
+        {
+            key: "_initializePushToTalk",
+            value: function _initializePushToTalk() {
+                var _this = this;
+                return _async_to_generator(function() {
+                    var success;
+                    return _ts_generator(this, function(_state) {
+                        switch(_state.label){
+                            case 0:
+                                return [
+                                    4,
+                                    _this.pushToTalkManager.initialize()
+                                ];
+                            case 1:
+                                success = _state.sent();
+                                if (success) {
+                                    if (_this.micStatusElement) {
+                                        _this.micStatusElement.classList.remove('hidden');
+                                    }
+                                    console.log('Push-to-talk initialized successfully');
+                                } else {
+                                    console.error('Failed to initialize push-to-talk');
+                                }
+                                return [
+                                    2
+                                ];
+                        }
+                    });
+                })();
+            }
+        },
+        {
+            key: "_onPTTStateChange",
+            value: function _onPTTStateChange(state) {
+                if (this.micStatusElement) {
+                    this.micStatusElement.className = '';
+                    this.micStatusElement.classList.add('state-' + state);
+                    
+                    var stateTexts = {
+                        idle: 'Presiona ESPACIO para hablar',
+                        listening: '🎤 Escuchando...',
+                        processing: '⚙️ Procesando...',
+                        talking: '💬 Hablando...'
+                    };
+                    
+                    if (this.micStatusText) {
+                        this.micStatusText.textContent = stateTexts[state] || stateTexts.idle;
+                    }
+                }
+                
+                this.isSpeechActive = (state === 'listening');
+                this._updateSpeechBubbleAppearance();
+                
+                this.isPlayingAudio = (state === 'talking');
+            }
+        },
+        {
+            key: "_onTranscript",
+            value: function _onTranscript(transcript) {
+                if (this.speechBubble && transcript) {
+                    clearTimeout(this.speechBubbleTimeout);
+                    this.speechBubble.innerHTML = transcript;
+                    this.speechBubble.style.opacity = '1';
+                    this._updateSpeechBubbleAppearance();
+                    
+                    var _this = this;
+                    this.speechBubbleTimeout = setTimeout(function() {
+                        _this.speechBubble.innerHTML = "...";
+                        _this.speechBubble.style.opacity = '0.7';
+                        _this._updateSpeechBubbleAppearance();
+                    }, 2000);
+                }
+            }
+        },
+        {
+            key: "_onPTTResponse",
+            value: function _onPTTResponse(response) {
+                var _this = this;
+                
+                if (response.replyText && this.speechBubble) {
+                    this.speechBubble.innerHTML = response.replyText;
+                    this.speechBubble.style.opacity = '1';
+                    this._updateSpeechBubbleAppearance();
+                }
+                
+                if (response.command) {
+                    this._handleIntentCommand(response.command);
+                }
+                
+                this._updateSceneContext();
+            }
+        },
+        {
+            key: "_updateSceneContext",
+            value: function _updateSceneContext() {
+                var sceneObjects = [];
+                if (this.platanoModel && this.scene && this.scene.children.includes(this.platanoModel)) {
+                    sceneObjects.push('plátano');
+                }
+                if (this.astronautModel && this.scene && this.scene.children.includes(this.astronautModel)) {
+                    sceneObjects.push('astronauta');
+                }
+                if (this.bodoqueModel && this.scene && this.scene.children.includes(this.bodoqueModel)) {
+                    sceneObjects.push('bodoque');
+                }
+                if (this.tulioModel && this.scene && this.scene.children.includes(this.tulioModel)) {
+                    sceneObjects.push('tulio');
+                }
+                
+                window.gameSceneContext = {
+                    character: this.selectedCharacter,
+                    background: this.selectedBackground,
+                    objects: sceneObjects
+                };
             }
         },
         {
@@ -2028,7 +2118,7 @@ export var Game = /*#__PURE__*/ function() {
                     case 'tulio':
                         this._createTulio();
                         break;
-                    case 'espacio':
+                    case 'space':
                         this._changeBackgroundToSpace();
                         break;
                     default:
@@ -2548,6 +2638,8 @@ export var Game = /*#__PURE__*/ function() {
                             _this.platanoModel.rotation.y = easeProgress * Math.PI * 2;
                             if (progress < 1) {
                                 requestAnimationFrame(animatePlatanoEntrance);
+                            } else {
+                                _this._updateSceneContext();
                             }
                         };
                         animatePlatanoEntrance();
@@ -2592,6 +2684,8 @@ export var Game = /*#__PURE__*/ function() {
                             _this.astronautModel.rotation.y = easeProgress * Math.PI * 2;
                             if (progress < 1) {
                                 requestAnimationFrame(animateAstronautEntrance);
+                            } else {
+                                _this._updateSceneContext();
                             }
                         };
                         animateAstronautEntrance();
@@ -2639,6 +2733,8 @@ export var Game = /*#__PURE__*/ function() {
                             _this.bodoqueModel.rotation.y = easeProgress * Math.PI * 2;
                             if (progress < 1) {
                                 requestAnimationFrame(animateBodoqueEntrance);
+                            } else {
+                                _this._updateSceneContext();
                             }
                         };
                         animateBodoqueEntrance();
@@ -2686,6 +2782,8 @@ export var Game = /*#__PURE__*/ function() {
                             _this.tulioModel.rotation.y = easeProgress * Math.PI * 2;
                             if (progress < 1) {
                                 requestAnimationFrame(animateTulioEntrance);
+                            } else {
+                                _this._updateSceneContext();
                             }
                         };
                         animateTulioEntrance();

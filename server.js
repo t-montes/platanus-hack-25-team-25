@@ -74,11 +74,14 @@ Response: {"text": "¡Un astronauta espacial! ¿Listo para explorar?", "command"
 User: "bodoque"
 Response: {"text": "¡Un bodoque! Aquí está. ¿Qué quieres hacer con él?", "command": "bodoque"}
 
+User: "tulio"
+Response: {"text": "¡Tulio! Aquí está. ¿Qué quieres hacer con él?", "command": "tulio"}
+
 User: "hola"
 Response: {"text": "¡Hola! ¿Qué quieres crear hoy?"}
 
 User: "¿qué puedo hacer?"
-Response: {"text": "¡Puedes agregar un dragón, mono, plátano, astronauta o bodoque! ¿Cuál quieres?"}
+Response: {"text": "¡Puedes agregar un dragón, mono, plátano, astronauta, bodoque o tulio! ¿Cuál quieres?"}
 
 ---
 
@@ -96,6 +99,7 @@ AVAILABLE OBJECTS:
 - PLÁTANO: When user mentions "plátano" or "platano" or "banana", include "command": "platano"
 - ASTRONAUTA: When user mentions "astronauta" or "astronaut", include "command": "astronaut"
 - BODOQUE: When user mentions "bodoque", include "command": "bodoque"
+- TULIO: When user mentions "tulio", include "command": "tulio"
 
 GUIDELINES:
 - Keep responses SHORT (max 1-2 sentences, under 100 words)
@@ -272,7 +276,8 @@ app.post("/speak", async (req, res) => {
         { keywords: ['mono', 'monkey'], contextNames: ['mono', 'monkey'], command: 'monkey' },
         { keywords: ['plátano', 'platano', 'banana'], contextNames: ['plátano', 'platano'], command: 'platano' },
         { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' },
-        { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' }
+        { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' },
+        { keywords: ['tulio'], contextNames: ['tulio'], command: 'tulio' }
       ];
       
       for (const check of objectChecks) {

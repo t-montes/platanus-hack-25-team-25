@@ -223,6 +223,7 @@ export var Game = /*#__PURE__*/ function() {
         this.platanoModel = null; // Add reference for the Platano model
         this.astronautModel = null; // Add reference for the Astronaut model
         this.bodoqueModel = null; // Add reference for the Bodoque model
+        this.tulioModel = null; // Add reference for the Tulio model
         this.interactiveModels = []; // Array to track all interactive models in the scene
         this.animationMixer = null; // For model animations
         this.animationClips = []; // To store all animation clips from the model
@@ -1963,6 +1964,9 @@ export var Game = /*#__PURE__*/ function() {
                 if (this.bodoqueModel && this.scene && this.scene.children.includes(this.bodoqueModel)) {
                     sceneObjects.push('bodoque');
                 }
+                if (this.tulioModel && this.scene && this.scene.children.includes(this.tulioModel)) {
+                    sceneObjects.push('tulio');
+                }
                 
                 var sceneContext = {
                     character: this.selectedCharacter,
@@ -2032,6 +2036,10 @@ export var Game = /*#__PURE__*/ function() {
                         break;
                     case 'bodoque':
                         this._createBodoque();
+                        break;
+                    case 'tulio':
+                        this._createTulio();
+                        break;
                     case 'espacio':
                         this._changeBackgroundToSpace();
                         break;
@@ -2720,6 +2728,53 @@ export var Game = /*#__PURE__*/ function() {
                     }
                 }, undefined, function(error) {
                     console.error('Error loading bodoque model:', error);
+                });
+            }
+        },
+        {
+            key: "_createTulio",
+            value: function _createTulio() {
+                var _this = this;
+                if (this.tulioModel && this.scene && this.scene.children.includes(this.tulioModel)) {
+                    console.log('Tulio already exists in scene');
+                    return;
+                }
+                console.log('Loading tulio model...');
+                var gltfLoader = new GLTFLoader();
+                gltfLoader.load('assets/tulio.gltf', function(gltf) {
+                    _this.tulioModel = gltf.scene;
+                    var box = new THREE.Box3().setFromObject(_this.tulioModel);
+                    var size = box.getSize(new THREE.Vector3());
+                    var center = box.getCenter(new THREE.Vector3());
+                    var scale = 150 / Math.max(size.x, size.y, size.z);
+                    _this.tulioModel.scale.set(0.01, 0.01, 0.01);
+                    _this.tulioModel.position.set(
+                        -center.x * scale,
+                        -center.y * scale,
+                        -800
+                    );
+                    if (_this.scene) {
+                        _this.scene.add(_this.tulioModel);
+                        _this.interactiveModels.push(_this.tulioModel);
+                        console.log('Tulio model loaded and added to scene at position:', _this.tulioModel.position);
+                        var startTime = Date.now();
+                        var duration = 1000;
+                        var targetScale = scale;
+                        var animateTulioEntrance = function() {
+                            var elapsed = Date.now() - startTime;
+                            var progress = Math.min(elapsed / duration, 1);
+                            var easeProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+                            var currentScale = 0.01 + (targetScale - 0.01) * easeProgress;
+                            _this.tulioModel.scale.set(currentScale, currentScale, currentScale);
+                            _this.tulioModel.rotation.y = easeProgress * Math.PI * 2;
+                            if (progress < 1) {
+                                requestAnimationFrame(animateTulioEntrance);
+                            }
+                        };
+                        animateTulioEntrance();
+                    }
+                }, undefined, function(error) {
+                    console.error('Error loading tulio model:', error);
                 });
             }
         }

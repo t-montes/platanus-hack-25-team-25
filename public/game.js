@@ -178,13 +178,14 @@ import { OnboardingHands } from './OnboardingHands.js'; // Import OnboardingHand
 
 export var Game = /*#__PURE__*/ function() {
     "use strict";
-    function Game(renderDiv, selectedCharacter, selectedBackground, onReadyCallback) {
+    function Game(renderDiv, selectedCharacter, selectedBackground, onReadyCallback, skipOnboarding) {
         var _this = this;
         _class_call_check(this, Game);
         this.renderDiv = renderDiv;
         this.selectedCharacter = selectedCharacter || 'red'; // Default to 'red' if not provided
         this.selectedBackground = selectedBackground || 'desert'; // Default to 'desert' if not provided
         this.onReadyCallback = onReadyCallback || null; // Callback when game is fully loaded
+        this.skipOnboarding = skipOnboarding || false; // Skip onboarding if user already registered
         console.log('Game initialized with selectedCharacter:', this.selectedCharacter, 'and selectedBackground:', this.selectedBackground);
         this.scene = null;
         this.camera = null;
@@ -337,8 +338,8 @@ export var Game = /*#__PURE__*/ function() {
                                 window.addEventListener('resize', _this._onResize.bind(_this));
                                 _this.gameState = 'tracking';
                                 _this._animate();
-                                // Start onboarding
-                                if (_this.onboardingHands) {
+                                // Start onboarding (only if not skipped)
+                                if (_this.onboardingHands && !_this.skipOnboarding) {
                                     _this.onboardingHands.startDragOnboarding();
 
                                     // Set interaction mode based on first step (now scaleUp)
@@ -356,6 +357,9 @@ export var Game = /*#__PURE__*/ function() {
                                             _this.onboardingText.style.opacity = '1';
                                         }, 100);
                                     }
+                                } else if (_this.skipOnboarding) {
+                                    // Mark onboarding as completed if skipped
+                                    _this.onboardingCompleted = true;
                                 }
                                 // Call the ready callback if provided
                                 if (_this.onReadyCallback) {

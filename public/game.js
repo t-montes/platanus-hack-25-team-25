@@ -232,6 +232,7 @@ export var Game = /*#__PURE__*/ function() {
         this.speechBubbleTimeout = null;
         this.onboardingText = null; // Text element for onboarding instructions
         this.isSpeechActive = false; // Track if speech recognition is active for styling
+        this.isPlayingAudio = false; // Track if audio is currently playing (for bubble animation)
         this.backendUrl = 'http://localhost:3000'; // Backend URL
         this.conversationId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         console.log('New conversation session created:', this.conversationId);
@@ -1765,6 +1766,11 @@ export var Game = /*#__PURE__*/ function() {
                                         _this.onboardingText.style.display = 'none';
                                     }, 500);
                                 }
+
+                                // Play recording after delay
+                                setTimeout(function() {
+                                    _this._playAudioWithAnimation('recording.mp3');
+                                }, 2000); // 2 second delay
                             }
                         }, 1200);
                     }
@@ -1801,17 +1807,27 @@ export var Game = /*#__PURE__*/ function() {
                 var showActiveStyling = this.isSpeechActive && !isPlaceholder;
                 var translateY = isPlaceholder ? '-5px' : '0px';
                 var scale = showActiveStyling ? '1.15' : '1.0';
-                this.speechBubble.style.transform = "translateX(-50%) translateY(".concat(translateY, ") scale(").concat(scale, ")");
+
+                // Only add talking animation when audio is playing
+                if (this.isPlayingAudio) {
+                    this.speechBubble.classList.add('speech-bubble-talking');
+                } else {
+                    this.speechBubble.classList.remove('speech-bubble-talking');
+                }
+
                 if (showActiveStyling) {
-                    // Cyan glow, blue drop shadow, enhanced original shadow
-                    // Active speech bubble: brighter color, stronger shadow
+                    // Active speech bubble: brighter color, stronger shadow (but no animation unless audio playing)
+                    this.speechBubble.style.transform = "translateX(-50%) translateY(".concat(translateY, ") scale(").concat(scale, ")");
                     this.speechBubble.style.boxShadow = '5px 5px 0px #007bff'; // Active blue shadow
                     this.speechBubble.style.border = '2px solid black'; // Keep black border
                     this.speechBubble.style.padding = '18px 28px'; // Slightly larger padding
                     this.speechBubble.style.fontSize = 'clamp(20px, 3.5vw, 26px)'; // Larger font when active
                     this.speechBubble.style.top = '15px'; // Increased top margin when active, reduced from 30px to complement base 10px
                 } else {
-                    // Default/inactive styling
+                    // Reset transform when not talking (unless animation is running)
+                    if (!this.isPlayingAudio) {
+                        this.speechBubble.style.transform = "translateX(-50%) translateY(".concat(translateY, ") scale(").concat(scale, ")");
+                    }
                     // Default/inactive speech bubble styling
                     this.speechBubble.style.boxShadow = '4px 4px 0px rgba(0,0,0,1)'; // Hard black shadow
                     this.speechBubble.style.border = '2px solid black'; // Black border
@@ -1819,6 +1835,42 @@ export var Game = /*#__PURE__*/ function() {
                     this.speechBubble.style.fontSize = 'clamp(16px, 3vw, 22px)'; // Original font size
                     this.speechBubble.style.top = '10px'; // Original top margin, changed from 20px
                 }
+            }
+        },
+        {
+            key: "_playAudioWithAnimation",
+            value: function _playAudioWithAnimation(audioSrc) {
+                var _this = this;
+                var audio = new Audio(audioSrc);
+
+                audio.addEventListener('play', function() {
+                    _this.isPlayingAudio = true;
+                    _this._updateSpeechBubbleAppearance();
+                });
+
+                audio.addEventListener('ended', function() {
+                    _this.isPlayingAudio = false;
+                    _this._updateSpeechBubbleAppearance();
+                });
+
+                audio.addEventListener('pause', function() {
+                    _this.isPlayingAudio = false;
+                    _this._updateSpeechBubbleAppearance();
+                });
+
+                audio.addEventListener('error', function(e) {
+                    _this.isPlayingAudio = false;
+                    _this._updateSpeechBubbleAppearance();
+                    console.error('Error playing audio:', e);
+                });
+
+                audio.play().catch(function(error) {
+                    _this.isPlayingAudio = false;
+                    _this._updateSpeechBubbleAppearance();
+                    console.error('Could not play audio:', error);
+                });
+
+                return audio;
             }
         },
         {
@@ -1929,10 +1981,8 @@ export var Game = /*#__PURE__*/ function() {
                     console.log('Command:', data.command);
                     
                     if (data.audioB64) {
-                        var audio = new Audio("data:".concat(data.audioMime || "audio/mpeg", ";base64,").concat(data.audioB64));
-                        audio.play().catch(function(err) {
-                            console.error("Error playing audio:", err);
-                        });
+                        var audioSrc = "data:".concat(data.audioMime || "audio/mpeg", ";base64,").concat(data.audioB64);
+                        _this._playAudioWithAnimation(audioSrc);
                     }
                     
                     if (data.command) {

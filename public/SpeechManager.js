@@ -193,7 +193,7 @@ export var SpeechManager = /*#__PURE__*/ function() {
                             'anima': 'animate',
                             'saludo': 'greet',
                             'saluda': 'greet',
-                            'saludar': 'greet',
+                            'salúdame': 'greet',
                             'plátano': 'platano',
                             'platano': 'platano',
                             'banana': 'platano',
@@ -217,7 +217,11 @@ export var SpeechManager = /*#__PURE__*/ function() {
                             'hielo': 'snow',
                             'frío': 'snow',
                             'frio': 'snow',
-                            'navidad': 'snow'
+                            'navidad': 'snow',
+                            'bodoque': 'bodoque',
+                            'tulio': 'tulio',
+                            'triviño': 'tulio',
+                            'trivino': 'tulio'
                         };
                         var spokenCommands = Object.keys(commandMap);
                         var _iteratorNormalCompletion = true, _didIteratorError = false, _iteratorError = undefined;

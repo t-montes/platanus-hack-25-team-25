@@ -1985,12 +1985,109 @@ export var Game = /*#__PURE__*/ function() {
                     this.speechBubble.style.opacity = '1';
                     this._updateSpeechBubbleAppearance();
                     
+                    this._detectAndExecuteKeywordCommands(transcript);
+                    
                     var _this = this;
                     this.speechBubbleTimeout = setTimeout(function() {
                         _this.speechBubble.innerHTML = "...";
                         _this.speechBubble.style.opacity = '0.7';
                         _this._updateSpeechBubbleAppearance();
                     }, 2000);
+                }
+            }
+        },
+        {
+            key: "_detectAndExecuteKeywordCommands",
+            value: function _detectAndExecuteKeywordCommands(transcript) {
+                if (!transcript) return;
+                
+                var _this = this;
+                var lowerTranscript = transcript.toLowerCase();
+                
+                var commandMap = {
+                    'arrastrar': 'drag',
+                    'drag': 'drag',
+                    'mover': 'drag',
+                    'mueve': 'drag',
+                    'rotar': 'rotate',
+                    'rotate': 'rotate',
+                    'girar': 'rotate',
+                    'gira': 'rotate',
+                    'escalar': 'scale',
+                    'scale': 'scale',
+                    'agrandar': 'scale',
+                    'zoom': 'scale',
+                    'animar': 'animate',
+                    'animación': 'animate',
+                    'anima': 'animate',
+                    'saludo': 'greet',
+                    'saluda': 'greet',
+                    'salúdame': 'greet',
+                    'saludar': 'greet',
+                    'hola': 'greet',
+                    'wave': 'greet',
+                    'plátano': 'platano',
+                    'platano': 'platano',
+                    'banana': 'platano',
+                    'banano': 'platano',
+                    'platanus': 'platano',
+                    'astronauta': 'astronaut',
+                    'astronaut': 'astronaut',
+                    'astronautas': 'astronaut',
+                    'cosmonauta': 'astronaut',
+                    'espacio': 'space',
+                    'space': 'space',
+                    'espacial': 'space',
+                    'cosmos': 'space',
+                    'desierto': 'desert',
+                    'desert': 'desert',
+                    'arena': 'desert',
+                    'sahara': 'desert',
+                    'nieve': 'snow',
+                    'snow': 'snow',
+                    'invierno': 'snow',
+                    'hielo': 'snow',
+                    'frío': 'snow',
+                    'frio': 'snow',
+                    'navidad': 'snow',
+                    'bodoque': 'bodoque',
+                    'tulio': 'tulio',
+                    'triviño': 'tulio',
+                    'trivino': 'tulio'
+                };
+                
+                var interactionModes = ['drag', 'rotate', 'scale', 'animate'];
+                var detectedCommands = [];
+                var detectedMode = null;
+                var usedCommands = {};
+                
+                for (var keyword in commandMap) {
+                    if (lowerTranscript.includes(keyword)) {
+                        var command = commandMap[keyword];
+                        
+                        if (interactionModes.indexOf(command) !== -1) {
+                            if (!detectedMode) {
+                                detectedMode = command;
+                                console.log('🎯 Interaction mode keyword detected:', keyword, '-> mode:', command);
+                            }
+                        } else {
+                            if (!usedCommands[command]) {
+                                detectedCommands.push(command);
+                                usedCommands[command] = true;
+                                console.log('🎯 Keyword detected:', keyword, '-> command:', command);
+                            }
+                        }
+                    }
+                }
+                
+                if (detectedMode) {
+                    console.log('🔧 Setting interaction mode to:', detectedMode);
+                    this._setInteractionMode(detectedMode);
+                }
+                
+                if (detectedCommands.length > 0) {
+                    console.log('📝 Executing', detectedCommands.length, 'command(s):', detectedCommands);
+                    this._handleIntentCommand(detectedCommands);
                 }
             }
         },
@@ -2108,36 +2205,60 @@ export var Game = /*#__PURE__*/ function() {
         {
             key: "_handleIntentCommand",
             value: function _handleIntentCommand(command) {
-                console.log('Executing intent command:', command);
-                switch(command.toLowerCase()) {
-                    case 'platano':
-                        this._createPlatano();
-                        break;
-                    case 'astronaut':
-                        this._createAstronaut();
-                        break;
-                    case 'bodoque':
-                        this._createBodoque();
-                        break;
-                    case 'tulio':
-                        this._createTulio();
-                        break;
-                    case 'espacio':
-                    case 'space':
-                        this._changeBackground('space');
-                        break;
-                    case 'desierto':
-                    case 'desert':
-                        this._changeBackground('desert');
-                        break;
-                    case 'nieve':
-                    case 'invierno':
-                    case 'snow':
-                        this._changeBackground('snow');
-                        break;
-                    default:
-                        console.warn('Unknown intent command:', command);
-                }
+                var _this = this;
+                var commands = Array.isArray(command) ? command : [command];
+                console.log('Executing intent command(s):', commands);
+                
+                commands.forEach(function(cmd) {
+                    if (!cmd) return;
+                    switch(cmd.toLowerCase()) {
+                        case 'platano':
+                            _this._createPlatano();
+                            break;
+                        case 'astronaut':
+                            _this._createAstronaut();
+                            break;
+                        case 'bodoque':
+                            _this._createBodoque();
+                            break;
+                        case 'tulio':
+                            _this._createTulio();
+                            break;
+                        case 'espacio':
+                        case 'space':
+                            _this._changeBackground('space');
+                            break;
+                        case 'desierto':
+                        case 'desert':
+                            _this._changeBackground('desert');
+                            break;
+                        case 'nieve':
+                        case 'invierno':
+                        case 'snow':
+                            _this._changeBackground('snow');
+                            break;
+                        case 'greet':
+                            var animationNames = Object.keys(_this.animationActions || {});
+                            var waveAnimation = animationNames.find(function(name) {
+                                return name.toLowerCase().includes('wave') || 
+                                       name.toLowerCase().includes('saludo') ||
+                                       name.toLowerCase().includes('greet');
+                            });
+                            if (waveAnimation) {
+                                _this._playAnimation(waveAnimation, true);
+                            } else if (animationNames.length > 0) {
+                                var firstAnimation = animationNames.find(function(name) {
+                                    return name !== 'None';
+                                });
+                                if (firstAnimation) {
+                                    _this._playAnimation(firstAnimation, true);
+                                }
+                            }
+                            break;
+                        default:
+                            console.warn('Unknown intent command:', cmd);
+                    }
+                });
             }
         },
         {

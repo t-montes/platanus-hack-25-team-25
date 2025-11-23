@@ -206,7 +206,7 @@ app.post("/process", async (req, res) => {
             },
             command: {
               type: "string",
-              description: "Optional command to execute (dragon, monkey, platano, astronaut, bodoque, tulio)",
+              description: "Optional command to execute - ONLY for semantic intent: bodoque, tulio, snow/invierno",
               nullable: true
             }
           },
@@ -282,53 +282,20 @@ app.post("/process", async (req, res) => {
       return res.json(response);
     }
 
-    // Keyword-based command detection (PRIORITY: keywords override LLM interpretation)
-    const transcriptLower = transcript.toLowerCase();
-    const contextStr = JSON.stringify(sceneContext).toLowerCase();
-    let command = null;
+    // Intent-based command detection (Gemini AI only for semantic understanding)
+    // Only detect: bodoque, tulio, snow/invierno (winter)
+    // Everything else is handled by keyword detection in the frontend (SpeechManager.js)
     
-    // First check for background/environment commands (highest priority)
-    const backgroundCommands = [
-      { keywords: ['espacio', 'space', 'espacial', 'cosmos', 'ir al espacio', 'irme para el espacio', 'quiero irme para el espacio'], command: 'space' }
-    ];
+    let commands = [];
     
-    for (const check of backgroundCommands) {
-      if (check.keywords.some(kw => transcriptLower.includes(kw))) {
-        console.log(`✅ KEYWORD MATCH: "${transcript}" → command: ${check.command} (background)`);
-        command = check.command;
-        break;
-      }
-    }
+    // Use Gemini's intent command if it matches our allowed intent commands
+    const allowedIntentCommands = ['bodoque', 'tulio', 'snow', 'invierno'];
     
-    // Then check for object creation commands (only if no background command found)
-    if (!command) {
-      const objectChecks = [
-        { keywords: ['dragón', 'dragon'], contextNames: ['dragón', 'dragon'], command: 'dragon' },
-        { keywords: ['mono', 'monkey'], contextNames: ['mono', 'monkey'], command: 'monkey' },
-        { keywords: ['plátano', 'platano', 'banana'], contextNames: ['plátano', 'platano'], command: 'platano' },
-        { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' },
-        { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' },
-        { keywords: ['tulio'], contextNames: ['tulio'], command: 'tulio' }
-      ];
-      
-      for (const check of objectChecks) {
-        const userMentioned = check.keywords.some(kw => transcriptLower.includes(kw));
-        const inScene = check.contextNames.some(name => contextStr.includes(name));
-        
-        if (userMentioned && !inScene) {
-          console.log(`✅ KEYWORD MATCH: "${transcript}" → command: ${check.command} (object)`);
-          command = check.command;
-          break;
-        }
-      }
-    }
-    
-    // Use keyword match if found, otherwise use LLM command
-    if (!command && llmCommand) {
-      command = llmCommand;
-      console.log(`📝 Using LLM command: ${command}`);
-    } else if (command && llmCommand && command !== llmCommand) {
-      console.log(`⚠️  Overriding LLM command "${llmCommand}" with keyword match "${command}"`);
+    if (llmCommand && allowedIntentCommands.includes(llmCommand.toLowerCase())) {
+      commands = [llmCommand];
+      console.log(`🤖 Using Gemini intent command: ${llmCommand}`);
+    } else if (llmCommand) {
+      console.log(`⚠️  Ignoring unsupported Gemini command: ${llmCommand} (only bodoque, tulio, snow/invierno are intent-based)`);
     }
 
     // 5) Update chat history
@@ -383,8 +350,9 @@ app.post("/process", async (req, res) => {
       audioMime: "audio/mpeg"
     };
 
-    if (command) {
-      response.command = command;
+    if (commands.length > 0) {
+      // Return array if multiple commands, single value if one command (for backward compatibility)
+      response.command = commands.length === 1 ? commands[0] : commands;
     }
 
     console.log('Response:', {
@@ -404,15 +372,25 @@ app.post("/process", async (req, res) => {
 
 const SYSTEM_PROMPT = `Eres un asistente amigable para niños en español. Responde SOLO en JSON.
 
-IMPORTANTE: NO crees objetos automáticamente. Solo responde conversacionalmente.
-Los comandos se detectan automáticamente por palabras clave, NO necesitas incluirlos.
+ARQUITECTURA DE COMANDOS:
+- La mayoría de comandos se detectan por palabras clave en el frontend (plátano, astronauta, espacio, desierto, rotar, escalar, saludar, etc.)
+- Solo devuelves comandos cuando detectas INTENCIÓN SEMÁNTICA para estos casos especiales:
+  * "bodoque" - cuando el usuario menciona a Bodoque del programa 31 Minutos
+  * "tulio" - cuando el usuario menciona a Tulio Triviño del programa 31 Minutos
+  * "snow" o "invierno" - cuando el usuario quiere un ambiente invernal/navideño
 
 Ejemplos:
 User: "quiero un plátano"
 {"text": "¡Genial! Te traigo un plátano. ¿Qué quieres hacer con él?"}
 
-User: "quiero irme para el espacio"
-{"text": "¡El espacio es increíble! Vamos a explorar las estrellas."}
+User: "trae a bodoque"
+{"text": "¡Aquí viene Bodoque! ¿Qué aventura tendremos?", "command": "bodoque"}
+
+User: "quiero ver a tulio triviño"
+{"text": "¡Tulio está aquí con las noticias! ¿Qué te gustaría saber?", "command": "tulio"}
+
+User: "quiero nieve y navidad"
+{"text": "¡Prepárate para un día de nieve!", "command": "snow"}
 
 User: "hola"
 {"text": "¡Hola! ¿Qué quieres crear hoy?"}
@@ -420,9 +398,8 @@ User: "hola"
 REGLAS:
 - Responde en español, máximo 2 oraciones cortas
 - Sé entusiasta y simple
-- NO incluyas "command" en tu respuesta (se detecta automáticamente)
-- Solo responde conversacionalmente
-- Siempre formato JSON válido con solo el campo "text"`;
+- Todo lo demás se maneja automáticamente por palabras clave
+- Siempre formato JSON válido`;
 
 
 // /speak: text -> Gemini -> TTS -> return audio
@@ -496,7 +473,7 @@ app.post("/speak", async (req, res) => {
             },
             command: {
               type: "string",
-              description: "Optional command to execute (dragon, monkey, platano, astronaut, bodoque, tulio)",
+              description: "Optional command to execute - ONLY for semantic intent: bodoque, tulio, snow/invierno",
               nullable: true
             }
           },
@@ -584,8 +561,6 @@ app.post("/speak", async (req, res) => {
       const contextStr = JSON.stringify(sceneContext).toLowerCase();
       
       const objectChecks = [
-        { keywords: ['dragón', 'dragon'], contextNames: ['dragón', 'dragon'], command: 'dragon' },
-        { keywords: ['mono', 'monkey'], contextNames: ['mono', 'monkey'], command: 'monkey' },
         { keywords: ['plátano', 'platano', 'banana'], contextNames: ['plátano', 'platano'], command: 'platano' },
         { keywords: ['astronauta', 'astronaut'], contextNames: ['astronauta', 'astronaut'], command: 'astronaut' },
         { keywords: ['bodoque'], contextNames: ['bodoque'], command: 'bodoque' },
